@@ -1,0 +1,29 @@
+.env
+__pycache__/
+*.pyc
+venv/
+.vscode/
+.idea/
+*.egg-info/
+.DS_Store
+
+# Uploaded files
+static/uploads/
+
+# Logs
+*.log
+logs/
+
+# Test / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+
+# Docker
+.docker/

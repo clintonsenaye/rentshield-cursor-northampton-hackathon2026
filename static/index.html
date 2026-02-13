@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI-Powered UK Renters' Rights Navigator - Know your rights under the Renters' Rights Act 2025">
+    <meta name="theme-color" content="#776B5D">
+
+    <title>RentShield</title>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="/static/icons/icon-192.svg">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="RentShield">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.svg">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+
+    <!-- Application Styles -->
+    <link rel="stylesheet" href="/static/styles.css">
+
+    <!-- jsPDF for PDF export (loaded async, non-blocking) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js" defer></script>
+</head>
+<body>
+
+<!-- Skip link for keyboard/screen reader users -->
+<a href="#pw" class="skip-link">Skip to main content</a>
+
+<!-- Auth Screen -->
+<div id="auth" role="main" aria-label="Sign in">
+    <div class="a-wrap">
+        <div class="a-brand">
+            <h1>RentShield</h1>
+            <p>AI-Powered UK Renters' Rights Navigator</p>
+        </div>
+        <div class="a-box">
+            <div class="a-tabs" id="a-tabs" role="tablist" aria-label="Select your role">
+                <button role="tab" aria-selected="true" class="on" onclick="pickRole('tenant')">Tenant</button>
+                <button role="tab" aria-selected="false" onclick="pickRole('landlord')">Landlord</button>
+                <button role="tab" aria-selected="false" onclick="pickRole('admin')">Admin</button>
+            </div>
+            <div class="fld">
+                <label for="a-email">Email</label>
+                <input type="email" id="a-email" placeholder="you@email.com" autocomplete="email">
+            </div>
+            <div class="fld">
+                <label for="a-pw">Password</label>
+                <input type="password" id="a-pw" placeholder="Enter password" autocomplete="current-password"
+                       onkeydown="if(event.key==='Enter')login()">
+            </div>
+            <button class="a-btn" onclick="login()">Sign in</button>
+            <div class="a-err" id="a-err" role="alert" aria-live="polite"></div>
+            <div class="a-foot">
+                <span>Don't have an account? Ask your landlord or admin.</span>
+                <br>
+                <button class="a-link" onclick="showResetForm()" type="button">Forgot password?</button>
+            </div>
+
+            <!-- Password Reset Form (hidden by default) -->
+            <div id="reset-form" class="hidden reset-section">
+                <div class="fld">
+                    <label for="reset-email">Email</label>
+                    <input type="email" id="reset-email" placeholder="your@email.com" autocomplete="email">
+                </div>
+                <div class="fld">
+                    <label for="reset-token">Reset Token</label>
+                    <input type="text" id="reset-token" placeholder="Paste token from your admin/landlord">
+                </div>
+                <div class="fld">
+                    <label for="reset-new-pw">New Password</label>
+                    <input type="password" id="reset-new-pw" placeholder="Min 8 chars, upper + lower + digit" autocomplete="new-password">
+                </div>
+                <button class="a-btn" onclick="resetPassword()">Reset Password</button>
+                <button class="a-link" onclick="hideResetForm()" type="button">Back to sign in</button>
+                <div class="a-err" id="reset-err" role="alert" aria-live="polite"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- App Shell -->
+<div id="app" aria-hidden="true">
+    <header class="bar" role="banner">
+        <div class="bar-l">
+            <div class="bar-logo">RentShield</div>
+        </div>
+        <div class="bar-r">
+            <div class="bar-user">
+                <div class="bar-av" id="h-av" aria-hidden="true">U</div>
+                <span id="h-name">User</span>
+            </div>
+            <button class="bar-out" onclick="showSettingsModal()" aria-label="Account settings">Settings</button>
+            <button class="bar-out" onclick="logout()" aria-label="Sign out">Sign out</button>
+        </div>
+    </header>
+    <div class="body">
+        <nav class="nav" id="nav" role="navigation" aria-label="Main navigation"></nav>
+        <main class="pw" id="pw" role="main" aria-label="Page content"></main>
+    </div>
+</div>
+
+<!-- Settings Modal (password change) -->
+<div id="settings-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Account settings">
+    <div class="modal-box">
+        <h3 class="ph">Account Settings</h3>
+        <div class="fld">
+            <label for="cp-cur">Current Password</label>
+            <input type="password" id="cp-cur" class="inp" placeholder="Enter current password" autocomplete="current-password">
+        </div>
+        <div class="fld">
+            <label for="cp-new">New Password</label>
+            <input type="password" id="cp-new" class="inp" placeholder="Min 8 chars, upper + lower + digit" autocomplete="new-password">
+        </div>
+        <div class="fld">
+            <label for="cp-confirm">Confirm New Password</label>
+            <input type="password" id="cp-confirm" class="inp" placeholder="Re-enter new password" autocomplete="new-password">
+        </div>
+        <div class="acts">
+            <button class="btn btn-p" onclick="changePassword()">Change Password</button>
+            <button class="btn btn-o" onclick="hideSettingsModal()">Cancel</button>
+        </div>
+        <div class="msg-t" id="cp-msg" role="alert" aria-live="polite"></div>
+    </div>
+</div>
+
+<!-- Hidden audio element for TTS playback -->
+<audio id="aud" class="hidden"></audio>
+
+<!-- Application JavaScript -->
+<script src="/static/app.js"></script>
+
+<!-- Service Worker Registration -->
+<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/static/sw.js').catch(function(error) {
+            console.log('SW registration failed:', error);
+        });
+    });
+}
+</script>
+</body>
+</html>

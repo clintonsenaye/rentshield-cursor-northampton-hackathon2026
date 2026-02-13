@@ -1,0 +1,41 @@
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+
+# Virtual environments
+venv
+.venv
+env
+
+# Environment files (secrets)
+.env
+
+# IDE files
+.vscode
+.idea
+.cursor
+
+# Documentation
+README.md
+REFACTORING_SUMMARY.md
+*.md
+
+# Docker files (avoid recursive inclusion)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Uploaded files (mounted as volume instead)
+static/uploads/*
+!static/uploads/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db

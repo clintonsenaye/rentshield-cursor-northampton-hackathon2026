@@ -1,0 +1,34 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: rentshield-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: mongosh --eval "db.runCommand('ping').ok" --quiet
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  app:
+    build: .
+    container_name: rentshield-app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/rentshield
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./static/uploads:/app/static/uploads
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
