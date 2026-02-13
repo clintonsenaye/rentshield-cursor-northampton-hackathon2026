@@ -23,8 +23,9 @@ from slowapi.util import get_remote_address
 from config import get_settings
 from database.connection import close_database_connection, initialize_database, get_database, get_mongo_client
 from routes import (
-    agreement, analytics, chat, deposit, evidence, letters, maintenance,
-    notice, perks, rewards, tasks, timeline, tts, users, wellbeing,
+    admin_analytics, agreement, analytics, chat, compliance, deposit, evidence,
+    evidence_guide, knowledge, letters, maintenance, notice, perks, rewards,
+    tasks, timeline, tts, users, wellbeing,
 )
 
 # Configure structured logging
@@ -111,6 +112,10 @@ app.include_router(letters.router)
 app.include_router(agreement.router)
 app.include_router(deposit.router)
 app.include_router(maintenance.router)
+app.include_router(compliance.router)
+app.include_router(knowledge.router)
+app.include_router(evidence_guide.router)
+app.include_router(admin_analytics.router)
 
 # Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")

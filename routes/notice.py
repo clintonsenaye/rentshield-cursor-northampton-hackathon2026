@@ -47,7 +47,10 @@ async def notice_check_endpoint(request: NoticeRequest) -> Dict[str, Any]:
     # Call AI service for notice analysis
     ai_service = get_ai_service()
     try:
-        analysis_text = await ai_service.analyze_notice(request.notice_text)
+        analysis_text = await ai_service.analyze_notice(
+            request.notice_text,
+            language=getattr(request, "language", "en") or "en",
+        )
     except Exception as exc:
         logger.exception("Critical error in notice analysis")
         raise HTTPException(

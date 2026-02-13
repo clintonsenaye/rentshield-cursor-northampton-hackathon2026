@@ -1,0 +1,208 @@
+{
+    "_meta": {
+        "version": "1.0.0",
+        "last_reviewed": "2026-02-13",
+        "reviewed_by": "RentShield legal content team",
+        "review_cycle_days": 90,
+        "disclaimer": "This content provides general legal information based on UK housing law. It is not a substitute for professional legal advice. Laws and regulations may change — always verify current provisions at legislation.gov.uk.",
+        "notes": "All source URLs point to legislation.gov.uk or official government resources. The Renters' Rights Act 2025 commencement date of 1 May 2026 is based on government announcements and should be verified against the official commencement order."
+    },
+    "articles": [
+        {
+            "article_id": "eviction-basics",
+            "question": "Can my landlord evict me without a reason?",
+            "answer": "No. Since the Renters' Rights Act 2025 came into effect, Section 21 'no-fault' evictions have been abolished. Your landlord can only evict you using Section 8 grounds, which require a specific legal reason such as rent arrears (at least 2 months), antisocial behaviour, or the landlord wanting to sell or move into the property. They must follow the correct notice period for each ground.",
+            "category": "eviction",
+            "tags": ["section 21", "section 8", "no-fault eviction", "renters rights act"],
+            "sources": [
+                {
+                    "title": "Housing Act 1988, Section 21 (as amended)",
+                    "url": "https://www.legislation.gov.uk/ukpga/1988/50/section/21"
+                },
+                {
+                    "title": "Housing Act 1988, Section 8",
+                    "url": "https://www.legislation.gov.uk/ukpga/1988/50/section/8"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "rent-increase-rules",
+            "question": "How much can my landlord increase the rent?",
+            "answer": "Your landlord can only increase rent once per year using a Section 13 notice, which must give at least 2 months' notice. The increase must be to the market rate — not punitive or retaliatory. If you believe the proposed increase is above market rate, you can challenge it at the First-tier Tribunal within the notice period. The tribunal will set a fair market rent and can no longer set rent higher than the landlord proposed. Rent review clauses in tenancy agreements cannot override the Section 13 process.",
+            "category": "rent_increases",
+            "tags": ["rent increase", "section 13", "market rate", "tribunal"],
+            "sources": [
+                {
+                    "title": "Housing Act 1988, Section 13",
+                    "url": "https://www.legislation.gov.uk/ukpga/1988/50/section/13"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "deposit-protection",
+            "question": "What happens if my landlord didn't protect my deposit?",
+            "answer": "Your landlord must protect your deposit in a government-approved scheme (DPS, MyDeposits, or TDS) within 30 days of receiving it, and provide you with 'prescribed information' about the scheme. If they fail to do this, you can apply to the county court for compensation of 1x to 3x the deposit amount. Additionally, the landlord may face restrictions on recovering possession until the deposit is properly protected. Keep records of when you paid and any communications about the deposit.",
+            "category": "deposits",
+            "tags": ["deposit", "deposit protection", "DPS", "MyDeposits", "TDS", "prescribed information"],
+            "sources": [
+                {
+                    "title": "Housing Act 2004, Section 213 (Deposit Protection)",
+                    "url": "https://www.legislation.gov.uk/ukpga/2004/34/section/213"
+                },
+                {
+                    "title": "Housing Act 2004, Section 214 (Penalties)",
+                    "url": "https://www.legislation.gov.uk/ukpga/2004/34/section/214"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "repairs-responsibility",
+            "question": "My landlord won't fix repairs. What can I do?",
+            "answer": "Your landlord is legally responsible for maintaining the structure and exterior of the property, heating, hot water, gas, electricity, and sanitation under Section 11 of the Landlord and Tenant Act 1985. Under Awaab's Law (extended to private rented sector by the Renters' Rights Act 2025), landlords must respond to hazard reports within 14 days and begin repairs within a further 7 days. For emergencies (no heating, dangerous electrics, sewage), the response must be within 24 hours. Steps: 1) Report in writing with photos. 2) Give reasonable time to respond. 3) Contact your local council's Environmental Health department. 4) Apply to the First-tier Tribunal for a Rent Repayment Order if the landlord still fails to act.",
+            "category": "repairs",
+            "tags": ["repairs", "maintenance", "Awaab's Law", "environmental health", "disrepair", "section 11"],
+            "sources": [
+                {
+                    "title": "Landlord and Tenant Act 1985, Section 11",
+                    "url": "https://www.legislation.gov.uk/ukpga/1985/70/section/11"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "illegal-eviction",
+            "question": "My landlord changed the locks while I was out. Is this legal?",
+            "answer": "No — this is an illegal eviction, which is a criminal offence under the Protection from Eviction Act 1977. Your landlord cannot lock you out, remove your belongings, cut off utilities, or harass you to leave. If this happens: 1) Call the police (101 or 999 if in danger). 2) Contact your local council's housing team — they have a duty to help with illegal evictions. 3) Contact Shelter (0808 800 4444) for emergency advice. 4) Keep evidence (photos, witness statements, messages). You may be able to get an emergency court injunction to get back into your home. Under the Renters' Rights Act 2025, local authorities can impose civil penalties of up to £35,000 for illegal eviction.",
+            "category": "eviction",
+            "tags": ["illegal eviction", "lock change", "harassment", "protection from eviction"],
+            "sources": [
+                {
+                    "title": "Protection from Eviction Act 1977",
+                    "url": "https://www.legislation.gov.uk/ukpga/1977/43"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "mould-damp-rights",
+            "question": "There's mould in my rented property. What are my rights?",
+            "answer": "Mould caused by structural issues (leaks, poor ventilation, inadequate insulation) is your landlord's responsibility under Section 11 of the Landlord and Tenant Act 1985. Under Awaab's Law, landlords must investigate within 14 days of being notified and start repairs within 7 days. Document everything: photograph the mould, note the date, and report in writing. If mould is affecting your health, see your GP and get medical evidence. If your landlord fails to act, contact Environmental Health at your local council. You can also claim compensation through the First-tier Tribunal. Never attempt to resolve a structural damp issue yourself — this is your landlord's legal obligation.",
+            "category": "repairs",
+            "tags": ["mould", "damp", "condensation", "Awaab's Law", "health hazard", "disrepair"],
+            "sources": [
+                {
+                    "title": "Landlord and Tenant Act 1985, Section 11",
+                    "url": "https://www.legislation.gov.uk/ukpga/1985/70/section/11"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "tenancy-agreement-unfair",
+            "question": "Can my tenancy agreement include any terms the landlord wants?",
+            "answer": "No. Under the Consumer Rights Act 2015, unfair terms in tenancy agreements are not enforceable. Common unfair terms include: professional cleaning clauses (requiring specific companies), excessive penalty charges, restrictions on decorating, and terms that override your statutory rights. Under the Renters' Rights Act 2025, tenants have the right to request a pet, and landlords can only refuse on reasonable grounds. Blanket pet bans are no longer enforceable. If you spot unfair terms, you can challenge them — use our Agreement Analyzer tool to check your contract.",
+            "category": "tenant_rights",
+            "tags": ["unfair terms", "tenancy agreement", "contract", "pets", "consumer rights"],
+            "sources": [
+                {
+                    "title": "Consumer Rights Act 2015, Part 2 (Unfair Terms)",
+                    "url": "https://www.legislation.gov.uk/ukpga/2015/15/part/2"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "landlord-entry-rights",
+            "question": "Can my landlord enter my home whenever they want?",
+            "answer": "No. Your landlord must give at least 24 hours' written notice before visiting, and visits should be at a reasonable time of day. They can only enter for specific reasons: inspections, repairs, or viewings (if you're leaving). You have the right to refuse entry if proper notice hasn't been given. In an emergency (gas leak, flooding), the landlord can enter without notice. Repeated unannounced visits may constitute harassment, which is a criminal offence under the Protection from Eviction Act 1977.",
+            "category": "tenant_rights",
+            "tags": ["landlord entry", "right to quiet enjoyment", "notice", "harassment", "privacy"],
+            "sources": [
+                {
+                    "title": "Protection from Eviction Act 1977",
+                    "url": "https://www.legislation.gov.uk/ukpga/1977/43"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "gas-safety-certificate",
+            "question": "Does my landlord need a gas safety certificate?",
+            "answer": "Yes. Landlords must have an annual gas safety check carried out by a Gas Safe registered engineer. They must provide you with a copy of the certificate (CP12) within 28 days of the check and before you move in. If your landlord doesn't have a valid gas safety certificate, this is a criminal offence carrying unlimited fines and up to 6 months imprisonment. Report it to the Health and Safety Executive (HSE) Gas Safety Advice Line: 0800 300 363.",
+            "category": "landlord_obligations",
+            "tags": ["gas safety", "CP12", "Gas Safe", "annual check", "HSE"],
+            "sources": [
+                {
+                    "title": "Gas Safety (Installation and Use) Regulations 1998",
+                    "url": "https://www.legislation.gov.uk/uksi/1998/2451"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "section-8-grounds",
+            "question": "What grounds can a landlord use to evict me under Section 8?",
+            "answer": "Section 8 grounds include both mandatory (court must grant possession) and discretionary (court decides) grounds. Key mandatory grounds: Ground 1 (landlord or close family member wants to live in the property — 4 months notice), Ground 1A (landlord wants to sell — 4 months notice), Ground 8 (at least 2 months rent arrears at notice and hearing). Key discretionary grounds: Ground 10 (some rent arrears), Ground 12 (breach of tenancy terms), Ground 14 (antisocial behaviour). The landlord must serve the correct notice period for each ground and follow proper procedure. You have the right to defend in court.",
+            "category": "eviction",
+            "tags": ["section 8", "eviction grounds", "mandatory", "discretionary", "rent arrears", "court"],
+            "sources": [
+                {
+                    "title": "Housing Act 1988, Schedule 2 (Grounds for Possession)",
+                    "url": "https://www.legislation.gov.uk/ukpga/1988/50/schedule/2"
+                },
+                {
+                    "title": "Housing Act 1988, Section 8",
+                    "url": "https://www.legislation.gov.uk/ukpga/1988/50/section/8"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "how-to-rent-guide",
+            "question": "What is the 'How to Rent' guide and do I need one?",
+            "answer": "The 'How to Rent' guide is a government checklist that explains tenants' and landlords' rights and responsibilities. Your landlord must provide you with the most current version at the start of every new tenancy. While the guide was historically required before a landlord could serve a valid Section 21 notice, Section 21 has now been abolished under the Renters' Rights Act 2025. The guide remains an important document for understanding your rights. You can download the latest version from GOV.UK. If your landlord hasn't given you this document, request it in writing.",
+            "category": "landlord_obligations",
+            "tags": ["how to rent", "government guide", "tenancy start", "documentation"],
+            "sources": [
+                {
+                    "title": "How to Rent Guide (GOV.UK)",
+                    "url": "https://www.gov.uk/government/publications/how-to-rent"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "article_id": "emergency-contacts",
+            "question": "Who can I call in a housing emergency?",
+            "answer": "For immediate danger: call 999. For housing emergencies:\n\n- **Shelter Helpline**: 0808 800 4444 (Mon-Fri, 8am-8pm)\n- **Citizens Advice**: 0800 144 8848 (Mon-Fri, 9am-5pm)\n- **Police non-emergency**: 101 (illegal eviction reports)\n- **Environmental Health**: Contact your local council\n- **Gas Emergency**: 0800 111 999 (National Gas Emergency Service)\n- **HSE Gas Safety**: 0800 300 363\n\nFor non-urgent legal advice, consider your local Law Centre, Shelter advice sessions, or the RentShield AI chat.",
+            "category": "emergency",
+            "tags": ["emergency", "shelter", "citizens advice", "police", "gas emergency", "contacts"],
+            "sources": [
+                {
+                    "title": "Shelter England",
+                    "url": "https://www.shelter.org.uk"
+                },
+                {
+                    "title": "Citizens Advice",
+                    "url": "https://www.citizensadvice.org.uk"
+                }
+            ],
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        }
+    ]
+}

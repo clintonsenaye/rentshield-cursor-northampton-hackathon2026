@@ -24,8 +24,20 @@
     <!-- Application Styles -->
     <link rel="stylesheet" href="/static/styles.css">
 
+    <!-- Apply saved theme before paint to prevent flash -->
+    <script>
+    (function() {
+        var t = localStorage.getItem('rs_theme');
+        if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'dark';
+        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+    </script>
+
     <!-- jsPDF for PDF export (loaded async, non-blocking) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js" defer></script>
+
+    <!-- Chart.js for admin analytics dashboard (loaded async, non-blocking) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
 </head>
 <body>
 
@@ -81,6 +93,17 @@
                 <div class="a-err" id="reset-err" role="alert" aria-live="polite"></div>
             </div>
         </div>
+        <div class="theme-toggle-auth">
+            <select class="lang-picker lang-picker-auth" onchange="switchLanguage(this.value)" aria-label="Language">
+                <option value="en" selected>English</option>
+                <option value="pl">Polski</option>
+                <option value="ro">Română</option>
+                <option value="bn">বাংলা</option>
+                <option value="ur">اردو</option>
+                <option value="ar">العربية</option>
+            </select>
+            <button id="theme-toggle-auth" onclick="toggleDarkMode()" type="button">Dark Mode</button>
+        </div>
     </div>
 </div>
 
@@ -95,6 +118,15 @@
                 <div class="bar-av" id="h-av" aria-hidden="true">U</div>
                 <span id="h-name">User</span>
             </div>
+            <select class="lang-picker lang-picker-header" onchange="switchLanguage(this.value)" aria-label="Language">
+                <option value="en" selected>English</option>
+                <option value="pl">Polski</option>
+                <option value="ro">Română</option>
+                <option value="bn">বাংলা</option>
+                <option value="ur">اردو</option>
+                <option value="ar">العربية</option>
+            </select>
+            <button class="bar-out" id="theme-toggle" onclick="toggleDarkMode()" aria-label="Toggle dark mode">Dark Mode</button>
             <button class="bar-out" onclick="showSettingsModal()" aria-label="Account settings">Settings</button>
             <button class="bar-out" onclick="logout()" aria-label="Sign out">Sign out</button>
         </div>

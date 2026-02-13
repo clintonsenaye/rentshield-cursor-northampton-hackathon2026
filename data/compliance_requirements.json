@@ -1,0 +1,131 @@
+{
+    "_meta": {
+        "version": "1.0.0",
+        "last_reviewed": "2026-02-13",
+        "reviewed_by": "RentShield legal content team",
+        "review_cycle_days": 90,
+        "disclaimer": "This content provides general legal information about landlord compliance obligations in England. It is not a substitute for professional legal advice. Always verify current requirements at legislation.gov.uk."
+    },
+    "requirements": [
+        {
+            "requirement_id": "gas_safety",
+            "title": "Gas Safety Certificate (CP12)",
+            "description": "Annual gas safety check by a Gas Safe registered engineer. Certificate must be provided to tenants within 28 days of the check and before they move in.",
+            "legal_reference": "Gas Safety (Installation and Use) Regulations 1998",
+            "source_url": "https://www.legislation.gov.uk/uksi/1998/2451",
+            "category": "safety",
+            "renewal_months": 12,
+            "penalty": "Unlimited fine and/or up to 6 months imprisonment",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "requirement_id": "epc",
+            "title": "Energy Performance Certificate (EPC)",
+            "description": "Valid EPC with minimum rating of E. Must be provided to tenants before they move in. Valid for 10 years.",
+            "legal_reference": "Energy Efficiency (Private Rented Property) Regulations 2015",
+            "source_url": "https://www.legislation.gov.uk/uksi/2015/962",
+            "category": "energy",
+            "renewal_months": 120,
+            "penalty": "Fine up to £5,000 per property",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "requirement_id": "eicr",
+            "title": "Electrical Installation Condition Report (EICR)",
+            "description": "Electrical safety inspection every 5 years by a qualified electrician. Report must be provided to tenants within 28 days.",
+            "legal_reference": "Electrical Safety Standards in the Private Rented Sector (England) Regulations 2020",
+            "source_url": "https://www.legislation.gov.uk/uksi/2020/312",
+            "category": "safety",
+            "renewal_months": 60,
+            "penalty": "Fine up to £30,000",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "requirement_id": "deposit_protection",
+            "title": "Deposit Protection",
+            "description": "Tenant deposit must be protected in a government-approved scheme within 30 days of receipt. Prescribed information must be provided to the tenant.",
+            "legal_reference": "Housing Act 2004, Sections 213-215",
+            "source_url": "https://www.legislation.gov.uk/ukpga/2004/34/section/213",
+            "category": "financial",
+            "renewal_months": null,
+            "penalty": "Compensation of 1-3x deposit amount; restrictions on recovering possession",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "requirement_id": "how_to_rent",
+            "title": "How to Rent Guide",
+            "description": "The current version of the government's 'How to Rent' guide must be provided to tenants at the start of every new tenancy.",
+            "legal_reference": "Deregulation Act 2015",
+            "source_url": "https://www.gov.uk/government/publications/how-to-rent",
+            "category": "documentation",
+            "renewal_months": null,
+            "penalty": "Non-compliance may weaken landlord's position in possession proceedings",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "requirement_id": "smoke_co_alarms",
+            "title": "Smoke and Carbon Monoxide Alarms",
+            "description": "Working smoke alarms on every floor. Carbon monoxide alarms in rooms with fixed combustion appliances (excluding gas cookers). Test at the start of each tenancy.",
+            "legal_reference": "Smoke and Carbon Monoxide Alarm (Amendment) Regulations 2022",
+            "source_url": "https://www.legislation.gov.uk/uksi/2022/707",
+            "category": "safety",
+            "renewal_months": 12,
+            "penalty": "Fine up to £5,000",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "requirement_id": "right_to_rent",
+            "title": "Right to Rent Checks",
+            "description": "Verify immigration status of all adult tenants before granting tenancy. Keep copies of documents. Follow-up checks required for time-limited immigration permissions.",
+            "legal_reference": "Immigration Act 2014, Part 3",
+            "source_url": "https://www.legislation.gov.uk/ukpga/2014/22/part/3",
+            "category": "legal",
+            "renewal_months": null,
+            "penalty": "Civil penalty up to £3,000 per tenant; potential criminal offence",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "requirement_id": "legionella",
+            "title": "Legionella Risk Assessment",
+            "description": "Assess risk of legionella bacteria in water systems. Not a legal requirement for a formal assessment, but landlords have a duty of care under health and safety law.",
+            "legal_reference": "Health and Safety at Work Act 1974; HSE Approved Code of Practice L8",
+            "source_url": "https://www.legislation.gov.uk/ukpga/1974/37",
+            "category": "safety",
+            "renewal_months": 24,
+            "penalty": "Prosecution under health and safety legislation",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "requirement_id": "fire_safety",
+            "title": "Fire Safety Compliance",
+            "description": "Ensure furniture meets fire safety regulations. Provide fire escape routes in HMOs. Fire doors, extinguishers, and fire blankets where required.",
+            "legal_reference": "Furniture and Furnishings (Fire Safety) Regulations 1988; Regulatory Reform (Fire Safety) Order 2005",
+            "source_url": "https://www.legislation.gov.uk/uksi/1988/1324",
+            "category": "safety",
+            "renewal_months": null,
+            "penalty": "Unlimited fine and/or imprisonment",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        },
+        {
+            "requirement_id": "landlord_licensing",
+            "title": "Landlord Licensing (Where Applicable)",
+            "description": "Mandatory HMO licence for properties with 5+ tenants forming 2+ households. Additional and selective licensing may apply in your local authority area.",
+            "legal_reference": "Housing Act 2004, Part 2",
+            "source_url": "https://www.legislation.gov.uk/ukpga/2004/34/part/2",
+            "category": "legal",
+            "renewal_months": 60,
+            "penalty": "Unlimited fine; rent repayment orders",
+            "last_verified": "2026-02-13",
+            "confidence": "high"
+        }
+    ]
+}

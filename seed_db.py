@@ -64,12 +64,21 @@ def seed_database() -> None:
 
         try:
             with open(data_path, "r", encoding="utf-8") as file:
-                legal_docs = json.load(file)
+                legal_data = json.load(file)
         except FileNotFoundError:
             logger.error("data/legal_knowledge.json not found. Create the data file first.")
             return
         except json.JSONDecodeError as error:
             logger.error("data/legal_knowledge.json is not valid JSON: %s", error)
+            return
+
+        # Extract documents from the new structure (supports both old array and new object format)
+        if isinstance(legal_data, list):
+            legal_docs = legal_data
+        elif isinstance(legal_data, dict):
+            legal_docs = legal_data.get("documents", [])
+        else:
+            logger.error("Unexpected format in legal_knowledge.json")
             return
 
         # Create compound text index with weights for relevance scoring
@@ -206,6 +215,40 @@ def seed_database() -> None:
         maintenance_collection.create_index("status")
         maintenance_collection.create_index("deadline")
         logger.info("Created maintenance collection with indexes")
+
+        # Create compliance collection with indexes
+        compliance_collection = db["compliance"]
+        compliance_collection.create_index("user_id")
+        logger.info("Created compliance collection with indexes")
+
+        # Seed community knowledge base
+        kb_collection = db["knowledge_base"]
+        kb_collection.drop()
+
+        kb_data_path = os.path.join(base_dir, "data", "community_knowledge.json")
+        try:
+            with open(kb_data_path, "r", encoding="utf-8") as file:
+                kb_data = json.load(file)
+            # Extract articles from the new structure (supports both old array and new object format)
+            if isinstance(kb_data, list):
+                kb_docs = kb_data
+            elif isinstance(kb_data, dict):
+                kb_docs = kb_data.get("articles", [])
+            else:
+                kb_docs = []
+            kb_collection.insert_many(kb_docs)
+            kb_collection.create_index("article_id", unique=True)
+            kb_collection.create_index("category")
+            kb_collection.create_index(
+                [("question", "text"), ("answer", "text"), ("tags", "text")],
+                name="kb_text_index",
+                weights={"question": 10, "tags": 5, "answer": 1},
+            )
+            logger.info("Inserted %d knowledge base articles", len(kb_docs))
+        except FileNotFoundError:
+            logger.warning("data/community_knowledge.json not found, skipping KB seed")
+        except Exception as exc:
+            logger.warning("Failed to seed knowledge base: %s", exc)
 
         # Verify setup with a test search
         try:

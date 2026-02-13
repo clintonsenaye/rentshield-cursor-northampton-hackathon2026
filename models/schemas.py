@@ -28,6 +28,17 @@ class ChatRequest(BaseModel):
         default="tenant",
         description="Type of user: 'tenant' or 'landlord'"
     )
+    language: Optional[str] = Field(
+        default="en",
+        max_length=5,
+        description="Language code for AI responses (en, pl, ro, bn, ur, ar)"
+    )
+
+
+class SourceCitation(BaseModel):
+    """A single source citation linking to legislation."""
+    title: str = Field(..., description="Name of the legislation or source")
+    url: str = Field(..., description="URL to legislation.gov.uk or official source")
 
 
 class ChatResponse(BaseModel):
@@ -45,6 +56,18 @@ class ChatResponse(BaseModel):
         None,
         description="URL for text-to-speech audio (if generated)"
     )
+    sources: List[SourceCitation] = Field(
+        default_factory=list,
+        description="Legislation sources used to generate this response"
+    )
+    confidence: Literal["high", "medium", "low"] = Field(
+        default="medium",
+        description="Confidence level based on knowledge base match quality"
+    )
+    disclaimer: str = Field(
+        default="This is general legal information based on UK housing law. It is not a substitute for professional legal advice. Verify current provisions at legislation.gov.uk.",
+        description="Legal disclaimer"
+    )
 
 
 class NoticeRequest(BaseModel):
@@ -61,6 +84,11 @@ class NoticeRequest(BaseModel):
         None,
         max_length=100,
         description="Session identifier"
+    )
+    language: Optional[str] = Field(
+        default="en",
+        max_length=5,
+        description="Language code for AI responses"
     )
 
 
@@ -140,3 +168,41 @@ class RewardActionRequest(BaseModel):
         description="Type of action completed"
     )
     details: Optional[str] = Field(None, max_length=1000, description="Additional details")
+
+
+# === COMPLIANCE MODELS ===
+
+
+class ComplianceUpdateRequest(BaseModel):
+    """Request model for updating a compliance item status."""
+    status: Literal["compliant", "due_soon", "overdue", "not_started"] = Field(
+        ..., description="Current compliance status"
+    )
+    completed_date: Optional[str] = Field(
+        None, max_length=20, description="Date the requirement was last completed (YYYY-MM-DD)"
+    )
+    expiry_date: Optional[str] = Field(
+        None, max_length=20, description="Date the certification expires (YYYY-MM-DD)"
+    )
+    notes: Optional[str] = Field(
+        None, max_length=2000, description="Additional notes about compliance"
+    )
+
+
+# === KNOWLEDGE BASE MODELS ===
+
+
+class KnowledgeHelpfulRequest(BaseModel):
+    """Request model for marking a knowledge article as helpful."""
+    session_id: Optional[str] = Field(None, max_length=100, description="Session identifier")
+
+
+# === EVIDENCE GUIDE MODELS ===
+
+
+class EvidenceGuideRequest(BaseModel):
+    """Request model for getting AI evidence collection guidance."""
+    issue_type: str = Field(
+        ..., min_length=1, max_length=100,
+        description="Type of issue (e.g., mould_damp, lock_change, disrepair)"
+    )

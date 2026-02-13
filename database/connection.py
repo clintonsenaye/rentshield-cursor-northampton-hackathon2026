@@ -133,6 +133,22 @@ def get_analytics_collection() -> Optional[Collection]:
     return _database["analytics"]
 
 
+def get_compliance_collection() -> Optional[Collection]:
+    """Get the compliance collection for landlord compliance tracking."""
+    if _database is None:
+        logger.debug("compliance collection requested but database not initialized")
+        return None
+    return _database["compliance"]
+
+
+def get_knowledge_base_collection() -> Optional[Collection]:
+    """Get the knowledge_base collection for community FAQ articles."""
+    if _database is None:
+        logger.debug("knowledge_base collection requested but database not initialized")
+        return None
+    return _database["knowledge_base"]
+
+
 def close_database_connection() -> None:
     """
     Close the MongoDB connection.

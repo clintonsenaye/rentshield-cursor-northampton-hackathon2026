@@ -28,6 +28,8 @@ URGENCY_LOW = "low"
 
 # Keyword groups for issue detection
 # CRITICAL: illegal eviction scenarios (criminal offences)
+# Only include phrases that unambiguously indicate illegal eviction or harassment.
+# Generic terms like "threatening" or "no heating" are too broad and cause false positives.
 CRITICAL_KEYWORDS = [
     "locked out",
     "changed locks",
@@ -45,18 +47,14 @@ CRITICAL_KEYWORDS = [
     "cut off electricity",
     "cut off the gas",
     "cut off the water",
-    "no electricity",
-    "no gas",
-    "no water",
-    "no heating",
-    "threatening",
-    "threatened",
-    "intimidating",
-    "harassing",
+    "landlord cut off",
     "forced out",
     "illegal eviction",
     "broke into",
-    "entered without",
+    "entered without permission",
+    "landlord threatening",
+    "landlord harassing",
+    "landlord intimidating",
 ]
 
 # HIGH: eviction-related issues
@@ -108,20 +106,27 @@ REPAIRS_KEYWORDS = [
     "damp",
     "broken boiler",
     "broken heating",
-    "boiler",
+    "no heating",
+    "boiler broken",
+    "boiler not working",
     "leak",
     "leaking",
+    "disrepair",
 ]
 
 # MEDIUM: discrimination issues
+# Use specific phrases to avoid false positives — "benefits" and "children" alone are too broad.
 DISCRIMINATION_KEYWORDS = [
     "discrimination",
-    "benefits",
-    "dss",
-    "universal credit",
-    "children",
+    "no dss",
+    "no benefits",
+    "universal credit refused",
+    "housing benefit refused",
+    "won't rent to me because",
     "refused because",
     "rejected because",
+    "no children allowed",
+    "no kids allowed",
 ]
 
 # LOW: pet-related issues

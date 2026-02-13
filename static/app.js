@@ -35,6 +35,28 @@ let selectedMood = 0;
 /** Reference to the currently playing audio element */
 let currentAudio = null;
 
+/** Current language code (default: English) */
+var currentLang = localStorage.getItem('rs_lang') || 'en';
+
+/** Loaded translation strings for the current language */
+var i18nStrings = {};
+
+/** English fallback strings (loaded once) */
+var i18nFallback = {};
+
+/** Available languages with display names */
+var LANGUAGES = {
+    en: 'English',
+    pl: 'Polski',
+    ro: 'Română',
+    bn: 'বাংলা',
+    ur: 'اردو',
+    ar: 'العربية'
+};
+
+/** RTL languages */
+var RTL_LANGUAGES = ['ar', 'ur'];
+
 
 /* --------------------------------------------------------------------------
    2. Constants
@@ -185,6 +207,225 @@ function renderIssueList(issues) {
 
 
 /* --------------------------------------------------------------------------
+   3b. Dark Mode
+   -------------------------------------------------------------------------- */
+
+/**
+ * Toggle between light and dark mode. Persists preference to localStorage.
+ */
+function toggleDarkMode() {
+    var html = document.documentElement;
+    var isDark = html.getAttribute('data-theme') === 'dark';
+    var newTheme = isDark ? 'light' : 'dark';
+    html.setAttribute('data-theme', newTheme);
+    localStorage.setItem('rs_theme', newTheme);
+    updateDarkModeButtons(newTheme);
+}
+
+/**
+ * Update all dark mode toggle button labels to reflect current theme.
+ * @param {string} theme - Current theme ('light' or 'dark')
+ */
+function updateDarkModeButtons(theme) {
+    var label = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+    var headerBtn = document.getElementById('theme-toggle');
+    var authBtn = document.getElementById('theme-toggle-auth');
+    if (headerBtn) headerBtn.textContent = label;
+    if (authBtn) authBtn.textContent = label;
+}
+
+/**
+ * Apply saved theme preference on page load.
+ * Respects system preference if no explicit choice was saved.
+ */
+function applyTheme() {
+    var saved = localStorage.getItem('rs_theme');
+    if (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        saved = 'dark';
+    }
+    var theme = saved || 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    updateDarkModeButtons(theme);
+}
+
+/* Apply theme immediately so button labels are correct on load */
+applyTheme();
+
+
+/* --------------------------------------------------------------------------
+   3c. Accessibility Helpers
+   -------------------------------------------------------------------------- */
+
+/**
+ * Announce a message to screen readers via a live region.
+ * Creates a temporary element that is read aloud then removed.
+ * @param {string} message - Text to announce
+ */
+function announceToScreenReader(message) {
+    var el = document.getElementById('sr-announce');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'sr-announce';
+        el.setAttribute('role', 'status');
+        el.setAttribute('aria-live', 'polite');
+        el.setAttribute('aria-atomic', 'true');
+        el.className = 'sr-only';
+        document.body.appendChild(el);
+    }
+    /* Clear then set to trigger re-announcement */
+    el.textContent = '';
+    setTimeout(function() { el.textContent = message; }, 100);
+}
+
+/**
+ * Set up keyboard navigation for the sidebar nav.
+ * Arrow keys move between nav buttons, Enter/Space activates.
+ */
+function initNavKeyboard() {
+    var nav = document.getElementById('nav');
+    if (!nav) return;
+    nav.addEventListener('keydown', function(e) {
+        var buttons = Array.from(nav.querySelectorAll('.n-btn'));
+        var idx = buttons.indexOf(document.activeElement);
+        if (idx === -1) return;
+
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            var next = idx < buttons.length - 1 ? idx + 1 : 0;
+            buttons[next].focus();
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+            e.preventDefault();
+            var prev = idx > 0 ? idx - 1 : buttons.length - 1;
+            buttons[prev].focus();
+        }
+    });
+}
+
+
+/* --------------------------------------------------------------------------
+   3d. Internationalization (i18n)
+   -------------------------------------------------------------------------- */
+
+/**
+ * Load translation strings for a given language.
+ * Fetches the JSON file from /static/i18n/{lang}.json.
+ * Falls back to English for any missing keys.
+ * @param {string} lang - Language code (en, pl, ro, bn, ur, ar)
+ */
+async function loadLanguage(lang) {
+    try {
+        var response = await fetch('/static/i18n/' + lang + '.json');
+        if (response.ok) {
+            i18nStrings = await response.json();
+        } else {
+            i18nStrings = {};
+        }
+    } catch (e) {
+        i18nStrings = {};
+    }
+
+    /* Load English fallback if not already loaded and not English */
+    if (lang !== 'en' && Object.keys(i18nFallback).length === 0) {
+        try {
+            var enResponse = await fetch('/static/i18n/en.json');
+            if (enResponse.ok) i18nFallback = await enResponse.json();
+        } catch (e) { /* ignore */ }
+    }
+
+    /* If English was selected, use it as both primary and fallback */
+    if (lang === 'en') {
+        i18nFallback = i18nStrings;
+    }
+
+    currentLang = lang;
+    localStorage.setItem('rs_lang', lang);
+
+    /* Apply RTL direction for Arabic and Urdu */
+    if (RTL_LANGUAGES.indexOf(lang) >= 0) {
+        document.documentElement.setAttribute('dir', 'rtl');
+    } else {
+        document.documentElement.removeAttribute('dir');
+    }
+
+    updateLanguagePickers();
+}
+
+/**
+ * Get a translated string by key.
+ * Returns the translation for the current language, or falls back to English.
+ * If key not found in either, returns the key itself.
+ * @param {string} key - Translation key
+ * @returns {string}
+ */
+function t(key) {
+    return i18nStrings[key] || i18nFallback[key] || key;
+}
+
+/**
+ * Switch the application language. Reloads translations and re-renders
+ * the current page to apply the new language.
+ * @param {string} lang - Language code
+ */
+async function switchLanguage(lang) {
+    await loadLanguage(lang);
+
+    /* Update static elements in the HTML */
+    updateStaticTranslations();
+
+    /* Re-initialize the current role view to apply translations */
+    if (currentUser) {
+        if (currentUser.role === 'tenant') initTenant();
+        else if (currentUser.role === 'landlord') initLandlord();
+        else if (currentUser.role === 'admin') initAdmin();
+    }
+}
+
+/**
+ * Update static HTML elements with translated text.
+ * These are elements in index.html that don't get re-rendered by JS.
+ */
+function updateStaticTranslations() {
+    /* Header bar */
+    var settingsBtn = document.querySelector('.bar-out[onclick="openSettings()"]');
+    if (settingsBtn) settingsBtn.textContent = t('settings');
+
+    var signOutBtn = document.querySelector('.bar-out[onclick="signOut()"]');
+    if (signOutBtn) signOutBtn.textContent = t('sign_out');
+
+    /* Settings modal */
+    var settingsTitle = document.querySelector('#settings-modal h3');
+    if (settingsTitle) settingsTitle.textContent = t('account_settings');
+}
+
+/**
+ * Update all language picker dropdowns to reflect the current language.
+ */
+function updateLanguagePickers() {
+    var pickers = document.querySelectorAll('.lang-picker');
+    pickers.forEach(function(picker) {
+        picker.value = currentLang;
+    });
+}
+
+/**
+ * Build HTML for a language picker dropdown.
+ * @param {string} extraClass - Optional additional CSS class
+ * @returns {string} HTML string for the select element
+ */
+function buildLanguagePicker(extraClass) {
+    var cls = 'lang-picker' + (extraClass ? ' ' + extraClass : '');
+    var html = '<select class="' + cls + '" onchange="switchLanguage(this.value)" aria-label="Language">';
+    var keys = Object.keys(LANGUAGES);
+    keys.forEach(function(code) {
+        var selected = code === currentLang ? ' selected' : '';
+        html += '<option value="' + code + '"' + selected + '>' + LANGUAGES[code] + '</option>';
+    });
+    html += '</select>';
+    return html;
+}
+
+
+/* --------------------------------------------------------------------------
    4. Authentication
    -------------------------------------------------------------------------- */
 
@@ -289,6 +530,8 @@ function boot() {
     } else {
         initAdmin();
     }
+
+    initNavKeyboard();
 }
 
 /**
@@ -336,6 +579,21 @@ function navigateTo(pageId) {
     if (pageId === 'deposit') loadDepositPage();
     if (pageId === 'maintenance') loadMaintenancePage();
     if (pageId === 'll-maintenance') loadLandlordMaintenance();
+    if (pageId === 'll-compliance') loadCompliance();
+    if (pageId === 'admin-analytics') loadAdminAnalytics();
+    if (pageId === 'knowledge') loadKnowledgeBase();
+
+    /* Announce page change to screen readers */
+    if (navButton) announceToScreenReader('Navigated to ' + navButton.textContent);
+
+    /* Focus the first heading on the new page for keyboard users */
+    if (pageElement) {
+        var heading = pageElement.querySelector('.ph, h2, h3');
+        if (heading) {
+            heading.setAttribute('tabindex', '-1');
+            heading.focus();
+        }
+    }
 }
 
 
@@ -364,7 +622,7 @@ function buildChatPageHtml(heading, description, quickPrompts, placeholder, side
                 '<div style="display:flex;justify-content:flex-end;padding:8px 20px 0;background:var(--white);border-bottom:1px solid var(--bg-secondary)">' +
                     '<button class="export-btn" onclick="exportChatPdf()" aria-label="Export chat as PDF">Export PDF</button>' +
                 '</div>' +
-                '<div class="chat-feed" id="feed">' +
+                '<div class="chat-feed" id="feed" aria-live="polite" aria-label="Chat messages">' +
                     '<div class="welcome" id="wel">' +
                         '<h2>' + heading + '</h2>' +
                         '<p>' + description + '</p>' +
@@ -425,6 +683,7 @@ function initTenant() {
         { lbl: 'Legal Tools' },
         { t: 'AI Chat', pg: 'chat' },
         { t: 'Notice Checker', pg: 'notice' },
+        { t: 'Knowledge Base', pg: 'knowledge' },
         { t: 'Letter Generator', pg: 'letters' },
         { t: 'Agreement Analyzer', pg: 'agreement' },
         { t: 'Deposit Checker', pg: 'deposit' },
@@ -478,6 +737,7 @@ function initTenant() {
     document.getElementById('pw').innerHTML =
         '<div class="pg on" id="pg-chat">' + chatHtml + '</div>' +
         '<div class="pg" id="pg-notice">' + noticeHtml + '</div>' +
+        '<div class="pg" id="pg-knowledge"><div class="ps" id="knowledge-container"><p class="empty">Loading...</p></div></div>' +
         '<div class="pg" id="pg-wellbeing">' +
             '<div class="ps" style="max-width:560px;margin:0 auto;width:100%">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
@@ -571,10 +831,12 @@ function initLandlord() {
         { t: 'Tasks', pg: 'll-tasks' },
         { t: 'Perks', pg: 'll-perks' },
         { t: 'Maintenance', pg: 'll-maintenance' },
+        { t: 'Compliance', pg: 'll-compliance' },
         { sep: 1 },
         { lbl: 'Legal Tools' },
         { t: 'AI Chat', pg: 'chat' },
-        { t: 'Notice Checker', pg: 'notice' }
+        { t: 'Notice Checker', pg: 'notice' },
+        { t: 'Knowledge Base', pg: 'knowledge' }
     ]);
 
     var landlordQuickPrompts = [
@@ -602,7 +864,9 @@ function initLandlord() {
         '<div class="pg" id="pg-ll-perks"><div class="ps" id="llpb"><p class="empty">Loading...</p></div></div>' +
         '<div class="pg" id="pg-chat">' + chatHtml + '</div>' +
         '<div class="pg" id="pg-notice">' + noticeHtml + '</div>' +
-        '<div class="pg" id="pg-ll-maintenance"><div class="ps" id="ll-maint-container"><p class="empty">Loading...</p></div></div>';
+        '<div class="pg" id="pg-ll-maintenance"><div class="ps" id="ll-maint-container"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg" id="pg-ll-compliance"><div class="ps" id="compliance-container"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg" id="pg-knowledge"><div class="ps" id="knowledge-container"><p class="empty">Loading...</p></div></div>';
 
     loadLandlordPage('ll-tenants');
 }
@@ -611,10 +875,12 @@ function initLandlord() {
 function initAdmin() {
     setNav([
         { lbl: 'Admin' },
-        { t: 'Landlords', pg: 'admin-ll' }
+        { t: 'Landlords', pg: 'admin-ll' },
+        { t: 'Analytics', pg: 'admin-analytics' }
     ]);
     document.getElementById('pw').innerHTML =
-        '<div class="pg on" id="pg-admin-ll"><div class="ps" id="allb"><p class="empty">Loading...</p></div></div>';
+        '<div class="pg on" id="pg-admin-ll"><div class="ps" id="allb"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg" id="pg-admin-analytics"><div class="ps" id="admin-analytics-container"><p class="empty">Loading...</p></div></div>';
     loadAdminLandlords();
 }
 
@@ -659,7 +925,8 @@ async function sendMessage() {
             body: JSON.stringify({
                 message: message,
                 session_id: sessionId,
-                user_type: userType
+                user_type: userType,
+                language: currentLang
             })
         });
 
@@ -670,7 +937,7 @@ async function sendMessage() {
 
         /* Hide typing indicator and show bot response */
         document.getElementById('dots').classList.add('hidden');
-        addChatBubble(data.response, 'bot', data.urgency);
+        addChatBubble(data.response, 'bot', data.urgency, data.sources, data.confidence, data.disclaimer);
 
         /* Update session stats */
         messageCount++;
@@ -701,8 +968,11 @@ async function sendMessage() {
  * @param {string} text - Message text
  * @param {string} type - 'user' or 'bot'
  * @param {string} [urgency] - Optional urgency level ('critical', 'high', etc.)
+ * @param {Array} [sources] - Optional array of source citations [{title, url}]
+ * @param {string} [confidence] - Optional confidence level ('high', 'medium', 'low')
+ * @param {string} [disclaimer] - Optional legal disclaimer text
  */
-function addChatBubble(text, type, urgency) {
+function addChatBubble(text, type, urgency, sources, confidence, disclaimer) {
     var feed = document.getElementById('feed');
     var bubble = document.createElement('div');
     bubble.className = 'bubble ' + type;
@@ -720,6 +990,50 @@ function addChatBubble(text, type, urgency) {
     var content = document.createElement('div');
     content.innerHTML = (type === 'bot') ? formatMarkdown(text) : text;
     bubble.appendChild(content);
+
+    /* Add sources and confidence for bot messages */
+    if (type === 'bot' && sources && sources.length > 0) {
+        var sourcesDiv = document.createElement('div');
+        sourcesDiv.className = 'chat-sources';
+
+        /* Confidence badge */
+        var badge = document.createElement('span');
+        badge.className = 'confidence-badge confidence-' + (confidence || 'medium');
+        badge.textContent = (confidence || 'medium').toUpperCase() + ' CONFIDENCE';
+        sourcesDiv.appendChild(badge);
+
+        /* Source links */
+        var sourcesList = document.createElement('div');
+        sourcesList.className = 'sources-list';
+        var sourcesLabel = document.createElement('span');
+        sourcesLabel.className = 'sources-label';
+        sourcesLabel.textContent = 'Sources: ';
+        sourcesList.appendChild(sourcesLabel);
+
+        for (var i = 0; i < sources.length; i++) {
+            var link = document.createElement('a');
+            link.href = sources[i].url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.className = 'source-link';
+            link.textContent = sources[i].title;
+            sourcesList.appendChild(link);
+            if (i < sources.length - 1) {
+                sourcesList.appendChild(document.createTextNode(' | '));
+            }
+        }
+
+        sourcesDiv.appendChild(sourcesList);
+        bubble.appendChild(sourcesDiv);
+    }
+
+    /* Add disclaimer for bot messages */
+    if (type === 'bot' && disclaimer) {
+        var disclaimerDiv = document.createElement('div');
+        disclaimerDiv.className = 'chat-disclaimer';
+        disclaimerDiv.textContent = disclaimer;
+        bubble.appendChild(disclaimerDiv);
+    }
 
     /* Add "Listen" button on bot messages */
     if (type === 'bot') {
@@ -918,7 +1232,7 @@ async function checkNotice() {
         var response = await fetch('/api/notice/check', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notice_text: noticeText, session_id: sessionId })
+            body: JSON.stringify({ notice_text: noticeText, session_id: sessionId, language: currentLang })
         });
 
         if (!response.ok) throw new Error('Notice check failed');
@@ -1816,8 +2130,14 @@ async function loadEvidence() {
         '<p class="pp">Upload and organize photos, documents, and screenshots as timestamped evidence. ' +
             'These can be exported as a PDF for use in disputes or tribunal proceedings.</p>' +
 
-        /* Upload form */
-        '<div class="card">' +
+        /* Upload mode toggle */
+        '<div class="guided-capture-toggle">' +
+            '<button id="ev-mode-quick" class="active" onclick="switchEvidenceMode(\'quick\')">Quick Upload</button>' +
+            '<button id="ev-mode-guided" onclick="switchEvidenceMode(\'guided\')">Guided Capture</button>' +
+        '</div>' +
+
+        /* Quick upload form */
+        '<div class="card" id="ev-quick-form">' +
             '<h4>Add Evidence</h4>' +
             '<div class="row">' +
                 '<div class="fg"><label>Title</label><input class="inp" id="ev-title" placeholder="e.g. Mould in bathroom"></div>' +
@@ -1833,6 +2153,16 @@ async function loadEvidence() {
             '</div>' +
             '<button class="btn btn-p" onclick="uploadEvidence()">Upload</button>' +
             '<div class="msg-t" id="ev-msg" role="alert"></div>' +
+        '</div>' +
+
+        /* Guided capture wizard */
+        '<div class="card" id="ev-guided-form" style="display:none">' +
+            '<h4>Guided Evidence Capture</h4>' +
+            '<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">' +
+                'Select your issue type below and we\'ll generate a checklist of exactly what evidence to collect.</p>' +
+            '<div class="guided-issue-grid" id="ev-issue-grid"></div>' +
+            '<div id="ev-guide-content"></div>' +
+            '<div class="msg-t" id="ev-guide-msg" role="alert"></div>' +
         '</div>';
 
     /* Evidence list grouped by category */
@@ -1865,6 +2195,7 @@ async function loadEvidence() {
     }
 
     container.innerHTML = html;
+    renderIssueTypeGrid();
 }
 
 /**
@@ -1993,6 +2324,344 @@ async function exportEvidencePdf() {
     });
 
     doc.save('rentshield-evidence-' + formatDateForFilename() + '.pdf');
+}
+
+
+/* --------------------------------------------------------------------------
+   16b. Guided Evidence Capture
+   -------------------------------------------------------------------------- */
+
+/** Issue types available for guided capture with labels and icons */
+var GUIDED_ISSUE_TYPES = {
+    mould_damp:       { label: 'Mould & Damp',    icon: '💧' },
+    lock_change:      { label: 'Lock Change',      icon: '🔒' },
+    property_damage:  { label: 'Disrepair',        icon: '🏚' },
+    harassment:       { label: 'Harassment',        icon: '⚠' },
+    rent_dispute:     { label: 'Rent Dispute',      icon: '💷' }
+};
+
+/** Currently selected issue type for guided capture */
+var guidedIssueType = '';
+
+/** Current guide data from the API */
+var currentGuide = null;
+
+/** Tracks which checklist items have been uploaded (by index) */
+var guidedUploaded = {};
+
+/**
+ * Switch between quick upload and guided capture modes.
+ * @param {string} mode - 'quick' or 'guided'
+ */
+function switchEvidenceMode(mode) {
+    var quickForm = document.getElementById('ev-quick-form');
+    var guidedForm = document.getElementById('ev-guided-form');
+    var quickBtn = document.getElementById('ev-mode-quick');
+    var guidedBtn = document.getElementById('ev-mode-guided');
+
+    if (mode === 'guided') {
+        quickForm.style.display = 'none';
+        guidedForm.style.display = 'block';
+        quickBtn.classList.remove('active');
+        guidedBtn.classList.add('active');
+    } else {
+        quickForm.style.display = 'block';
+        guidedForm.style.display = 'none';
+        quickBtn.classList.add('active');
+        guidedBtn.classList.remove('active');
+    }
+}
+
+/**
+ * Render the issue type selection grid inside the guided capture form.
+ */
+function renderIssueTypeGrid() {
+    var grid = document.getElementById('ev-issue-grid');
+    if (!grid) return;
+
+    var html = '';
+    var keys = Object.keys(GUIDED_ISSUE_TYPES);
+    keys.forEach(function(key) {
+        var issue = GUIDED_ISSUE_TYPES[key];
+        var selectedClass = key === guidedIssueType ? ' selected' : '';
+        html += '<button class="guided-issue-btn' + selectedClass + '" onclick="selectGuidedIssue(\'' + key + '\')">' +
+            '<span class="issue-icon">' + issue.icon + '</span>' +
+            issue.label +
+        '</button>';
+    });
+
+    /* Add "Other" option for AI-generated guidance */
+    html += '<button class="guided-issue-btn' + (guidedIssueType === 'other' ? ' selected' : '') + '" onclick="showCustomIssueInput()">' +
+        '<span class="issue-icon">?</span>' +
+        'Other' +
+    '</button>';
+
+    grid.innerHTML = html;
+}
+
+/**
+ * Handle selection of an issue type for guided capture.
+ * @param {string} issueType
+ */
+function selectGuidedIssue(issueType) {
+    guidedIssueType = issueType;
+    guidedUploaded = {};
+    currentGuide = null;
+    renderIssueTypeGrid();
+    loadEvidenceGuide(issueType);
+}
+
+/**
+ * Show a text input for custom issue types (the "Other" option).
+ */
+function showCustomIssueInput() {
+    guidedIssueType = 'other';
+    guidedUploaded = {};
+    currentGuide = null;
+    renderIssueTypeGrid();
+
+    var content = document.getElementById('ev-guide-content');
+    content.innerHTML =
+        '<div style="margin-bottom:12px">' +
+            '<label style="font-weight:600;font-size:13px">Describe your issue</label>' +
+            '<div class="row" style="margin-top:6px">' +
+                '<div class="fg"><input class="inp" id="ev-custom-issue" placeholder="e.g. noise complaints, utility disputes..."></div>' +
+                '<div><button class="btn btn-p" onclick="loadCustomIssueGuide()">Get Guidance</button></div>' +
+            '</div>' +
+        '</div>';
+}
+
+/**
+ * Load evidence guide for a custom issue type entered by the user.
+ */
+function loadCustomIssueGuide() {
+    var input = document.getElementById('ev-custom-issue');
+    var issueText = input ? input.value.trim() : '';
+    if (!issueText) return;
+    loadEvidenceGuide(issueText);
+}
+
+/**
+ * Fetch evidence collection guidance from the API for a given issue type.
+ * @param {string} issueType
+ */
+async function loadEvidenceGuide(issueType) {
+    var content = document.getElementById('ev-guide-content');
+    var msg = document.getElementById('ev-guide-msg');
+
+    content.innerHTML = '<p class="empty" style="text-align:center;padding:16px">Loading guidance...</p>';
+    msg.textContent = '';
+    msg.className = 'msg-t';
+
+    try {
+        var response = await fetch('/api/evidence/guide', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ issue_type: issueType })
+        });
+
+        if (!response.ok) {
+            var errMsg = await getResponseError(response, 'Failed to load guidance.');
+            msg.textContent = errMsg;
+            msg.className = 'msg-t msg-err';
+            content.innerHTML = '';
+            return;
+        }
+
+        currentGuide = await response.json();
+        renderEvidenceGuide();
+    } catch (error) {
+        msg.textContent = 'Connection error. Check server is running.';
+        msg.className = 'msg-t msg-err';
+        content.innerHTML = '';
+    }
+}
+
+/**
+ * Render the evidence guide checklist and tips.
+ */
+function renderEvidenceGuide() {
+    if (!currentGuide) return;
+    var content = document.getElementById('ev-guide-content');
+    var guide = currentGuide;
+
+    var html = '<h4 style="margin-bottom:8px">' + guide.title + '</h4>';
+
+    /* Checklist */
+    if (guide.guidance && guide.guidance.length) {
+        html += '<ul class="guide-checklist">';
+        guide.guidance.forEach(function(item, index) {
+            var isUploaded = guidedUploaded[index];
+            var liClass = isUploaded ? ' uploaded' : '';
+            var priority = item.priority || 'recommended';
+
+            html += '<li class="' + liClass + '">' +
+                '<span class="guide-priority ' + priority + '">' + priority + '</span>' +
+                '<span class="guide-item-text">' + item.item + '</span>';
+
+            if (isUploaded) {
+                html += '<button class="guide-upload-btn done" disabled>Uploaded</button>';
+            } else {
+                html += '<button class="guide-upload-btn" onclick="triggerGuidedUpload(' + index + ')">Upload</button>';
+            }
+
+            html += '</li>';
+        });
+        html += '</ul>';
+    }
+
+    /* Hidden file input for guided uploads */
+    html += '<input type="file" id="ev-guided-file" accept="image/*,.pdf" style="display:none">';
+
+    /* Tips section */
+    if (guide.tips && guide.tips.length) {
+        html += '<div class="guide-tips">' +
+            '<h5>Tips</h5><ul>';
+        guide.tips.forEach(function(tip) {
+            html += '<li>' + tip + '</li>';
+        });
+        html += '</ul></div>';
+    }
+
+    /* Source badge */
+    if (guide.source === 'ai') {
+        html += '<p style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:right">Guidance generated by AI</p>';
+    }
+
+    content.innerHTML = html;
+}
+
+/** Index of the checklist item currently being uploaded */
+var guidedUploadIndex = -1;
+
+/**
+ * Trigger the file picker for a specific checklist item.
+ * @param {number} index - The checklist item index
+ */
+function triggerGuidedUpload(index) {
+    guidedUploadIndex = index;
+    var fileInput = document.getElementById('ev-guided-file');
+    if (!fileInput) return;
+
+    /* Remove old listener and add fresh one */
+    var newInput = fileInput.cloneNode(true);
+    fileInput.parentNode.replaceChild(newInput, fileInput);
+    newInput.addEventListener('change', handleGuidedFileSelect);
+    newInput.click();
+}
+
+/**
+ * Handle file selection for guided upload. Uploads the file with
+ * auto-generated title and category from the guide checklist.
+ */
+async function handleGuidedFileSelect() {
+    var fileInput = document.getElementById('ev-guided-file');
+    if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
+
+    var msg = document.getElementById('ev-guide-msg');
+    var guideItem = currentGuide.guidance[guidedUploadIndex];
+    if (!guideItem) return;
+
+    /* Map issue type to evidence category */
+    var categoryMap = {
+        mould_damp: 'photo_condition',
+        lock_change: 'photo_condition',
+        property_damage: 'photo_condition',
+        harassment: 'correspondence',
+        rent_dispute: 'receipt_payment'
+    };
+    var category = categoryMap[guidedIssueType] || 'other';
+
+    var formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('title', guideItem.item.substring(0, 100));
+    formData.append('category', category);
+    formData.append('description', 'Guided capture: ' + (currentGuide.title || guidedIssueType));
+
+    msg.textContent = 'Uploading...';
+    msg.className = 'msg-t';
+
+    try {
+        var response = await fetch('/api/evidence', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + authToken },
+            body: formData
+        });
+
+        if (!response.ok) {
+            var errMsg = await getResponseError(response, 'Upload failed.');
+            msg.textContent = errMsg;
+            msg.className = 'msg-t msg-err';
+            return;
+        }
+
+        /* Mark item as uploaded and re-render */
+        guidedUploaded[guidedUploadIndex] = true;
+        msg.textContent = 'Evidence uploaded for: ' + guideItem.item.substring(0, 50);
+        msg.className = 'msg-t msg-ok';
+        renderEvidenceGuide();
+
+        /* Refresh evidence list below */
+        var items = [];
+        try {
+            var listResponse = await fetch('/api/evidence', { headers: getAuthHeaders() });
+            if (listResponse.ok) items = await listResponse.json();
+        } catch (e) { /* ignore */ }
+        renderEvidenceList(items);
+    } catch (error) {
+        msg.textContent = 'Upload error.';
+        msg.className = 'msg-t msg-err';
+    }
+}
+
+/**
+ * Re-render just the evidence list portion (used after guided upload
+ * to avoid resetting the guided capture wizard state).
+ * @param {Array} items - Evidence items from API
+ */
+function renderEvidenceList(items) {
+    /* Find existing evidence list and replace, or append after forms */
+    var container = document.getElementById('evidence-container');
+    var existingGrid = container.querySelector('.evidence-grid');
+    var existingEmpty = container.querySelector('.empty:last-child');
+
+    /* Build evidence list HTML */
+    var html = '';
+    if (items.length) {
+        html += '<div class="sec">Your Evidence (' + items.length + ' items)</div>';
+        html += '<div class="evidence-grid">';
+        items.forEach(function(item) {
+            var isImage = item.file_type && item.file_type.startsWith('image/');
+            var dateStr = item.created_at ? new Date(item.created_at).toLocaleDateString('en-GB') : '';
+            html += '<div class="card evidence-card">' +
+                (isImage
+                    ? '<img class="evidence-thumb" src="' + item.file_url + '" alt="' + item.title + '">'
+                    : '<div class="evidence-file-icon">PDF</div>'
+                ) +
+                '<div class="evidence-info">' +
+                    '<h4>' + item.title + '</h4>' +
+                    '<span class="badge b-pending">' + (EVIDENCE_CATEGORIES[item.category] || item.category) + '</span>' +
+                    (item.description ? '<p>' + item.description + '</p>' : '') +
+                    '<div class="meta">' + dateStr + ' &middot; ' + formatFileSize(item.file_size) + '</div>' +
+                '</div>' +
+                '<div class="acts">' +
+                    '<a href="' + item.file_url + '" target="_blank" class="btn btn-o btn-sm">View</a>' +
+                    '<button class="btn btn-d btn-sm" onclick="deleteEvidence(\'' + item.evidence_id + '\')">Delete</button>' +
+                '</div>' +
+            '</div>';
+        });
+        html += '</div>';
+    } else {
+        html += '<p class="empty" style="text-align:center;padding:20px">No evidence uploaded yet.</p>';
+    }
+
+    /* Remove old list elements and append new */
+    var oldSec = container.querySelector('.sec');
+    if (oldSec) oldSec.remove();
+    if (existingGrid) existingGrid.remove();
+    if (existingEmpty) existingEmpty.remove();
+
+    container.insertAdjacentHTML('beforeend', html);
 }
 
 
@@ -2342,7 +3011,8 @@ async function generateLetter() {
                 letter_type: letterType,
                 property_address: address,
                 situation: situation,
-                additional_context: context
+                additional_context: context,
+                language: currentLang
             })
         });
 
@@ -2566,7 +3236,7 @@ async function analyzeAgreement() {
         var response = await fetch('/api/agreement/analyze', {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify({ agreement_text: text })
+            body: JSON.stringify({ agreement_text: text, language: currentLang })
         });
 
         if (!response.ok) {
@@ -2822,7 +3492,8 @@ async function checkDeposit() {
                 date_paid: datePaid,
                 scheme_name: schemeName,
                 has_prescribed_info: hasInfo,
-                notes: notes
+                notes: notes,
+                language: currentLang
             })
         });
 
@@ -3406,6 +4077,56 @@ document.addEventListener('keydown', function(event) {
    -------------------------------------------------------------------------- */
 
 /**
+ * Add a consistent branded header to a jsPDF document.
+ * Returns the Y position after the header for content to start.
+ * @param {Object} doc - jsPDF document instance
+ * @param {string} title - Document title
+ * @returns {number} Y position below the header
+ */
+function pdfHeader(doc, title) {
+    /* Brand line */
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(27, 42, 74);
+    doc.text('RentShield', 14, 18);
+
+    /* Subtitle */
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(74, 85, 104);
+    doc.text(title, 14, 26);
+
+    /* Date and disclaimer */
+    doc.setFontSize(8);
+    doc.setTextColor(140, 149, 166);
+    doc.text('Exported: ' + new Date().toLocaleString('en-GB'), 14, 33);
+    doc.text('General legal information — not professional legal advice.', 14, 37);
+
+    /* Divider line */
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, 40, 196, 40);
+
+    doc.setTextColor(0, 0, 0);
+    return 48;
+}
+
+/**
+ * Add page number footer to all pages of a jsPDF document.
+ * Call this after all content is added, before saving.
+ * @param {Object} doc - jsPDF document instance
+ */
+function pdfPageNumbers(doc) {
+    var totalPages = doc.internal.getNumberOfPages();
+    for (var i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(140, 149, 166);
+        doc.text('Page ' + i + ' of ' + totalPages, 14, 290);
+        doc.text('RentShield - UK Renters\' Rights Navigator', 196, 290, { align: 'right' });
+    }
+}
+
+/**
  * Export chat conversation as a PDF document.
  * Collects all chat bubbles and formats them into a downloadable PDF.
  */
@@ -3666,6 +4387,132 @@ function formatDateForFilename() {
         String(now.getDate()).padStart(2, '0');
 }
 
+/**
+ * Export maintenance requests as a PDF document.
+ */
+async function exportMaintenancePdf() {
+    if (typeof window.jspdf === 'undefined') {
+        alert('PDF library is still loading. Please try again in a moment.');
+        return;
+    }
+
+    try {
+        var response = await fetch('/api/maintenance', { headers: getAuthHeaders() });
+        if (!response.ok) { alert('Failed to load maintenance data.'); return; }
+        var data = await response.json();
+        var requests = data.requests || data;
+        if (!Array.isArray(requests) || requests.length === 0) {
+            alert('No maintenance requests to export.');
+            return;
+        }
+
+        var jsPDF = window.jspdf.jsPDF;
+        var doc = new jsPDF();
+        var y = pdfHeader(doc, 'Maintenance Requests');
+
+        requests.forEach(function(req, index) {
+            var blockHeight = 35;
+            if (y + blockHeight > 275) { doc.addPage(); y = 20; }
+
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.text((index + 1) + '. ' + (req.title || req.category || 'Request'), 14, y);
+            y += 6;
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Status: ' + (req.status || 'pending') + '  |  Category: ' + (req.category || 'N/A'), 14, y);
+            y += 5;
+
+            if (req.description) {
+                var lines = doc.splitTextToSize(req.description, 170);
+                doc.text(lines, 14, y);
+                y += lines.length * 4 + 2;
+            }
+
+            if (req.created_at) {
+                doc.setTextColor(140, 149, 166);
+                doc.text('Submitted: ' + new Date(req.created_at).toLocaleString('en-GB'), 14, y);
+                doc.setTextColor(0, 0, 0);
+                y += 5;
+            }
+
+            doc.setDrawColor(220, 220, 220);
+            doc.line(14, y, 196, y);
+            y += 6;
+        });
+
+        pdfPageNumbers(doc);
+        doc.save('rentshield-maintenance-' + formatDateForFilename() + '.pdf');
+    } catch (error) {
+        alert('Failed to export maintenance PDF.');
+    }
+}
+
+/**
+ * Export landlord compliance dashboard as a PDF document.
+ */
+async function exportCompliancePdf() {
+    if (typeof window.jspdf === 'undefined') {
+        alert('PDF library is still loading. Please try again in a moment.');
+        return;
+    }
+
+    try {
+        var response = await fetch('/api/compliance', { headers: getAuthHeaders() });
+        if (!response.ok) { alert('Failed to load compliance data.'); return; }
+        var data = await response.json();
+
+        var jsPDF = window.jspdf.jsPDF;
+        var doc = new jsPDF();
+        var y = pdfHeader(doc, 'Compliance Dashboard — Score: ' + data.score + '%');
+
+        doc.setFontSize(10);
+        doc.text(data.compliant_count + ' of ' + data.total_count + ' requirements met', 14, y);
+        y += 10;
+
+        data.items.forEach(function(item, index) {
+            var blockHeight = 30;
+            if (y + blockHeight > 275) { doc.addPage(); y = 20; }
+
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.text((index + 1) + '. ' + item.title, 14, y);
+
+            /* Status badge text */
+            var statusLabel = (COMPLIANCE_STATUS[item.status] || {}).label || item.status;
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text('[' + statusLabel + ']', 180, y);
+            y += 6;
+
+            doc.setFontSize(9);
+            var descLines = doc.splitTextToSize(item.description, 170);
+            doc.text(descLines, 14, y);
+            y += descLines.length * 4 + 2;
+
+            doc.setTextColor(140, 149, 166);
+            doc.text('Ref: ' + item.legal_reference, 14, y);
+            y += 4;
+            doc.text('Penalty: ' + item.penalty, 14, y);
+            doc.setTextColor(0, 0, 0);
+            y += 6;
+
+            if (item.completed_date) { doc.text('Completed: ' + item.completed_date, 14, y); y += 4; }
+            if (item.expiry_date) { doc.text('Expires: ' + item.expiry_date, 14, y); y += 4; }
+
+            doc.setDrawColor(220, 220, 220);
+            doc.line(14, y, 196, y);
+            y += 6;
+        });
+
+        pdfPageNumbers(doc);
+        doc.save('rentshield-compliance-' + formatDateForFilename() + '.pdf');
+    } catch (error) {
+        alert('Failed to export compliance PDF.');
+    }
+}
+
 
 /* --------------------------------------------------------------------------
    18. ARIA State Management
@@ -3688,9 +4535,481 @@ function updateRoleTabAria(role) {
 
 
 /* --------------------------------------------------------------------------
-   19. Auto-boot (resume session if token exists)
+   19. Landlord Compliance Dashboard
    -------------------------------------------------------------------------- */
 
-if (authToken && currentUser) {
-    boot();
+/** Status colours for compliance cards */
+var COMPLIANCE_STATUS = {
+    compliant:   { label: 'Compliant',   cls: 'b-approved' },
+    due_soon:    { label: 'Due Soon',    cls: 'b-submitted' },
+    overdue:     { label: 'Overdue',     cls: 'b-rejected' },
+    not_started: { label: 'Not Started', cls: 'b-pending' }
+};
+
+/**
+ * Load the landlord compliance dashboard.
+ */
+async function loadCompliance() {
+    var container = document.getElementById('compliance-container');
+    if (!container) return;
+    container.innerHTML = '<p class="empty">Loading compliance data...</p>';
+
+    try {
+        var response = await fetch('/api/compliance', { headers: getAuthHeaders() });
+        if (!response.ok) {
+            var errMsg = await getResponseError(response, 'Failed to load compliance.');
+            container.innerHTML = '<p class="msg-t msg-err">' + errMsg + '</p>';
+            return;
+        }
+
+        var data = await response.json();
+        renderCompliance(container, data);
+    } catch (error) {
+        container.innerHTML = '<p class="msg-t msg-err">Connection error.</p>';
+    }
 }
+
+/**
+ * Render the compliance dashboard cards.
+ * @param {HTMLElement} container - The container element
+ * @param {Object} data - Compliance data from API
+ */
+function renderCompliance(container, data) {
+    var scoreClass = data.score >= 80 ? 'msg-ok' : (data.score >= 50 ? '' : 'msg-err');
+    var html = '' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+            '<h2 class="ph">Compliance Dashboard</h2>' +
+            '<button class="export-btn" onclick="exportCompliancePdf()" aria-label="Export compliance as PDF">Export PDF</button>' +
+        '</div>' +
+        '<p class="pp">Track your legal obligations as a UK landlord. Keep all certifications current to avoid penalties.</p>' +
+        '<div class="card" style="text-align:center;margin-bottom:20px">' +
+            '<div style="font-size:36px;font-weight:700" class="' + scoreClass + '">' + data.score + '%</div>' +
+            '<div style="font-size:12px;color:var(--text-secondary)">' + data.compliant_count + ' of ' + data.total_count + ' requirements met</div>' +
+        '</div>' +
+        '<div class="grid">';
+
+    data.items.forEach(function(item) {
+        var st = COMPLIANCE_STATUS[item.status] || COMPLIANCE_STATUS.not_started;
+        var expiry = item.expiry_date ? '<div class="meta">Expires: ' + item.expiry_date + '</div>' : '';
+        var completed = item.completed_date ? '<div class="meta">Completed: ' + item.completed_date + '</div>' : '';
+
+        html += '' +
+            '<div class="card">' +
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
+                    '<h4>' + item.title + '</h4>' +
+                    '<span class="badge ' + st.cls + '">' + st.label + '</span>' +
+                '</div>' +
+                '<p>' + item.description + '</p>' +
+                '<div class="meta" style="margin-top:6px">Ref: ' + item.legal_reference + '</div>' +
+                '<div class="meta" style="color:var(--danger)">Penalty: ' + item.penalty + '</div>' +
+                completed + expiry +
+                (item.notes ? '<div class="meta">Notes: ' + item.notes + '</div>' : '') +
+                '<div class="acts">' +
+                    '<button class="btn btn-sm btn-g" onclick="showComplianceForm(\'' + item.requirement_id + '\', \'compliant\')">Mark Compliant</button>' +
+                    '<button class="btn btn-sm btn-o" onclick="showComplianceForm(\'' + item.requirement_id + '\', \'due_soon\')">Due Soon</button>' +
+                    '<button class="btn btn-sm btn-d" onclick="showComplianceForm(\'' + item.requirement_id + '\', \'overdue\')">Overdue</button>' +
+                '</div>' +
+                '<div id="cf-' + item.requirement_id + '" class="hidden" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' +
+                    '<div class="row">' +
+                        '<div class="fg"><label>Completed Date</label><input class="inp" type="date" id="cd-' + item.requirement_id + '"></div>' +
+                        '<div class="fg"><label>Expiry Date</label><input class="inp" type="date" id="ed-' + item.requirement_id + '"></div>' +
+                    '</div>' +
+                    '<div class="fg" style="margin-top:6px"><label>Notes</label><input class="inp" type="text" id="cn-' + item.requirement_id + '" placeholder="Optional notes" value="' + (item.notes || '').replace(/"/g, '&quot;') + '"></div>' +
+                    '<div class="acts">' +
+                        '<button class="btn btn-sm btn-p" onclick="saveComplianceItem(\'' + item.requirement_id + '\')">Save</button>' +
+                        '<button class="btn btn-sm btn-o" onclick="document.getElementById(\'cf-' + item.requirement_id + '\').classList.add(\'hidden\')">Cancel</button>' +
+                    '</div>' +
+                    '<div class="msg-t" id="cm-' + item.requirement_id + '"></div>' +
+                '</div>' +
+            '</div>';
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+/** Pending compliance status for the form */
+var pendingComplianceStatus = '';
+
+/**
+ * Show the compliance update form for a requirement.
+ * @param {string} reqId - Requirement ID
+ * @param {string} status - The status to set
+ */
+function showComplianceForm(reqId, status) {
+    pendingComplianceStatus = status;
+    var form = document.getElementById('cf-' + reqId);
+    if (form) form.classList.remove('hidden');
+}
+
+/**
+ * Save updated compliance status for a requirement.
+ * @param {string} reqId - Requirement ID
+ */
+async function saveComplianceItem(reqId) {
+    var completedDate = document.getElementById('cd-' + reqId).value;
+    var expiryDate = document.getElementById('ed-' + reqId).value;
+    var notes = document.getElementById('cn-' + reqId).value.trim();
+    var msgEl = document.getElementById('cm-' + reqId);
+
+    try {
+        var response = await fetch('/api/compliance/' + reqId, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                status: pendingComplianceStatus,
+                completed_date: completedDate || null,
+                expiry_date: expiryDate || null,
+                notes: notes || null
+            })
+        });
+
+        if (!response.ok) {
+            var errMsg = await getResponseError(response, 'Failed to update.');
+            msgEl.textContent = errMsg;
+            msgEl.className = 'msg-t msg-err';
+            return;
+        }
+
+        msgEl.textContent = 'Updated.';
+        msgEl.className = 'msg-t msg-ok';
+        setTimeout(function() { loadCompliance(); }, 500);
+    } catch (error) {
+        msgEl.textContent = 'Connection error.';
+        msgEl.className = 'msg-t msg-err';
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   20. Community Knowledge Base
+   -------------------------------------------------------------------------- */
+
+/** Category display names for knowledge base */
+var KB_CATEGORIES = {
+    eviction: 'Eviction & Notices',
+    rent_increases: 'Rent Increases',
+    repairs: 'Repairs & Maintenance',
+    deposits: 'Deposit Disputes',
+    tenant_rights: 'Tenant Rights',
+    landlord_obligations: 'Landlord Obligations',
+    emergency: 'Emergency'
+};
+
+/**
+ * Load the community knowledge base page.
+ * @param {string} [query] - Optional search query
+ * @param {string} [category] - Optional category filter
+ */
+async function loadKnowledgeBase(query, category) {
+    var container = document.getElementById('knowledge-container');
+    if (!container) return;
+
+    /* Build search UI on first load */
+    var searchHtml = '' +
+        '<h2 class="ph">Knowledge Base</h2>' +
+        '<p class="pp">Common questions about UK renters\' rights. Find instant answers before asking the AI.</p>' +
+        '<div class="row" style="margin-bottom:16px">' +
+            '<div class="fg" style="flex:3"><input class="inp" id="kb-search" type="text" placeholder="Search questions..." value="' + (query || '') + '" onkeydown="if(event.key===\'Enter\')searchKnowledgeBase()"></div>' +
+            '<div class="fg" style="flex:1"><select class="inp" id="kb-cat" onchange="searchKnowledgeBase()"><option value="">All Categories</option></select></div>' +
+            '<button class="btn btn-p" onclick="searchKnowledgeBase()">Search</button>' +
+        '</div>' +
+        '<div id="kb-results"><p class="empty">Loading...</p></div>';
+
+    container.innerHTML = searchHtml;
+
+    /* Fetch articles */
+    var url = '/api/knowledge';
+    var params = [];
+    if (query) params.push('q=' + encodeURIComponent(query));
+    if (category) params.push('category=' + encodeURIComponent(category));
+    if (params.length > 0) url += '?' + params.join('&');
+
+    try {
+        var response = await fetch(url);
+        if (!response.ok) {
+            document.getElementById('kb-results').innerHTML = '<p class="msg-t msg-err">Failed to load articles.</p>';
+            return;
+        }
+
+        var data = await response.json();
+
+        /* Populate category dropdown */
+        var catSelect = document.getElementById('kb-cat');
+        if (catSelect && data.categories) {
+            var catHtml = '<option value="">All Categories</option>';
+            data.categories.forEach(function(cat) {
+                var label = KB_CATEGORIES[cat] || cat.replace(/_/g, ' ');
+                var selected = (category === cat) ? ' selected' : '';
+                catHtml += '<option value="' + cat + '"' + selected + '>' + label + '</option>';
+            });
+            catSelect.innerHTML = catHtml;
+        }
+
+        renderKnowledgeArticles(data.articles);
+    } catch (error) {
+        document.getElementById('kb-results').innerHTML = '<p class="msg-t msg-err">Connection error.</p>';
+    }
+}
+
+/**
+ * Trigger a knowledge base search from the UI inputs.
+ */
+function searchKnowledgeBase() {
+    var query = document.getElementById('kb-search').value.trim();
+    var category = document.getElementById('kb-cat').value;
+    loadKnowledgeBase(query || null, category || null);
+}
+
+/**
+ * Render knowledge base articles as accordion cards.
+ * @param {Array} articles - Array of article objects
+ */
+function renderKnowledgeArticles(articles) {
+    var resultsEl = document.getElementById('kb-results');
+    if (!resultsEl) return;
+
+    if (!articles || articles.length === 0) {
+        resultsEl.innerHTML = '<p class="empty">No articles found. Try a different search term.</p>';
+        return;
+    }
+
+    var html = '';
+    articles.forEach(function(article) {
+        var catLabel = KB_CATEGORIES[article.category] || article.category;
+        var helpful = article.helpful_count || 0;
+
+        html += '' +
+            '<div class="card" style="cursor:pointer" onclick="toggleKbArticle(\'' + article.article_id + '\')">' +
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+                    '<h4 style="flex:1">' + article.question + '</h4>' +
+                    '<span class="badge b-pending" style="margin-left:8px;flex-shrink:0">' + catLabel + '</span>' +
+                '</div>' +
+                '<div id="kb-body-' + article.article_id + '" class="hidden" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' +
+                    '<p style="font-size:13px;line-height:1.7;white-space:pre-line">' + article.answer + '</p>' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">' +
+                        '<div style="font-size:11px;color:var(--text-muted)">' + helpful + ' people found this helpful</div>' +
+                        '<button class="btn btn-sm btn-o" onclick="event.stopPropagation();markHelpful(\'' + article.article_id + '\', this)">Helpful</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+    });
+
+    resultsEl.innerHTML = html;
+}
+
+/**
+ * Toggle visibility of a knowledge base article body.
+ * @param {string} articleId - Article identifier
+ */
+function toggleKbArticle(articleId) {
+    var body = document.getElementById('kb-body-' + articleId);
+    if (body) body.classList.toggle('hidden');
+}
+
+/**
+ * Mark a knowledge base article as helpful.
+ * @param {string} articleId - Article identifier
+ * @param {HTMLElement} btn - The button clicked
+ */
+async function markHelpful(articleId, btn) {
+    try {
+        var response = await fetch('/api/knowledge/' + articleId + '/helpful', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+
+        if (response.ok) {
+            btn.textContent = 'Thanks!';
+            btn.disabled = true;
+        }
+    } catch (error) {
+        /* Silently fail — non-critical */
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   21. Admin Analytics Dashboard
+   -------------------------------------------------------------------------- */
+
+/** Urgency chart colours */
+var URGENCY_COLORS = {
+    critical: '#C0392B',
+    high: '#D4903A',
+    medium: '#2B8A7E',
+    low: '#27864A'
+};
+
+/**
+ * Load the admin analytics dashboard.
+ */
+async function loadAdminAnalytics() {
+    var container = document.getElementById('admin-analytics-container');
+    if (!container) return;
+    container.innerHTML = '<p class="empty">Loading analytics...</p>';
+
+    try {
+        var response = await fetch('/api/admin/analytics', { headers: getAuthHeaders() });
+        if (!response.ok) {
+            var errMsg = await getResponseError(response, 'Failed to load analytics.');
+            container.innerHTML = '<p class="msg-t msg-err">' + errMsg + '</p>';
+            return;
+        }
+
+        var data = await response.json();
+        renderAdminAnalytics(container, data);
+    } catch (error) {
+        container.innerHTML = '<p class="msg-t msg-err">Connection error.</p>';
+    }
+}
+
+/**
+ * Render the admin analytics dashboard with stat cards and charts.
+ * @param {HTMLElement} container - Container element
+ * @param {Object} data - Analytics data from API
+ */
+function renderAdminAnalytics(container, data) {
+    var html = '' +
+        '<h2 class="ph">Analytics Dashboard</h2>' +
+        '<p class="pp">Overview of platform usage, issues, and engagement.</p>' +
+
+        /* Stat cards row */
+        '<div class="grid">' +
+            buildStatCard('Total Users', data.users.total, 'Landlords: ' + data.users.landlords + ' / Tenants: ' + data.users.tenants) +
+            buildStatCard('Conversations', data.conversations, 'Total AI chat sessions') +
+            buildStatCard('Maintenance', data.maintenance.open + ' open', 'Resolved: ' + data.maintenance.resolved + ' / Total: ' + data.maintenance.total) +
+            buildStatCard('Wellbeing', 'Avg ' + data.wellbeing.average_mood + '/5', data.wellbeing.journal_entries + ' journal entries') +
+        '</div>' +
+
+        /* Charts row */
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">' +
+            '<div class="card"><h4>Issues by Type</h4><canvas id="chart-issues" height="200"></canvas></div>' +
+            '<div class="card"><h4>Urgency Breakdown</h4><canvas id="chart-urgency" height="200"></canvas></div>' +
+        '</div>' +
+
+        /* Recent activity */
+        '<div style="margin-top:16px">' +
+            '<div class="sec">Recent Activity</div>';
+
+    if (data.recent_activity && data.recent_activity.length > 0) {
+        data.recent_activity.forEach(function(event) {
+            var issue = (event.issue_type || 'unknown').replace(/_/g, ' ');
+            var urgency = event.urgency || 'low';
+            var userType = event.user_type || 'unknown';
+            var time = event.timestamp ? new Date(event.timestamp).toLocaleString() : '';
+            html += '<div class="card" style="padding:10px 14px">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                    '<span style="font-size:12px"><strong>' + issue + '</strong> — ' + userType + '</span>' +
+                    '<span class="badge ' + (urgency === 'critical' ? 'b-rejected' : urgency === 'high' ? 'b-submitted' : 'b-pending') + '">' + urgency + '</span>' +
+                '</div>' +
+                '<div class="meta">' + time + '</div>' +
+            '</div>';
+        });
+    } else {
+        html += '<p class="empty">No recent activity.</p>';
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+
+    /* Render charts after DOM is updated */
+    setTimeout(function() {
+        renderIssuesChart(data.issues);
+        renderUrgencyChart(data.urgency);
+    }, 50);
+}
+
+/**
+ * Build a stat card HTML string.
+ * @param {string} title - Card title
+ * @param {string|number} value - Main value
+ * @param {string} subtitle - Subtitle text
+ * @returns {string} HTML string
+ */
+function buildStatCard(title, value, subtitle) {
+    return '<div class="card" style="text-align:center">' +
+        '<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">' + title + '</div>' +
+        '<div style="font-size:28px;font-weight:700;color:var(--text);margin:4px 0">' + value + '</div>' +
+        '<div style="font-size:11px;color:var(--text-secondary)">' + subtitle + '</div>' +
+    '</div>';
+}
+
+/**
+ * Render the issues bar chart using Chart.js.
+ * @param {Array} issues - Array of { type, count }
+ */
+function renderIssuesChart(issues) {
+    var canvas = document.getElementById('chart-issues');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    var labels = issues.map(function(i) { return i.type.replace(/_/g, ' '); });
+    var counts = issues.map(function(i) { return i.count; });
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Count',
+                data: counts,
+                backgroundColor: '#2B8A7E',
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { precision: 0 } },
+                x: { ticks: { maxRotation: 45 } }
+            }
+        }
+    });
+}
+
+/**
+ * Render the urgency donut chart using Chart.js.
+ * @param {Array} urgency - Array of { level, count }
+ */
+function renderUrgencyChart(urgency) {
+    var canvas = document.getElementById('chart-urgency');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    var labels = urgency.map(function(u) { return u.level; });
+    var counts = urgency.map(function(u) { return u.count; });
+    var colors = urgency.map(function(u) { return URGENCY_COLORS[u.level] || '#8C95A6'; });
+
+    new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: counts,
+                backgroundColor: colors,
+                borderWidth: 2,
+                borderColor: getComputedStyle(document.documentElement).getPropertyValue('--white').trim()
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 12, font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+
+/* --------------------------------------------------------------------------
+   21. Auto-boot (resume session if token exists)
+   -------------------------------------------------------------------------- */
+
+/* Load translations on startup, then boot if logged in */
+(async function() {
+    await loadLanguage(currentLang);
+    if (authToken && currentUser) {
+        boot();
+    }
+})();
