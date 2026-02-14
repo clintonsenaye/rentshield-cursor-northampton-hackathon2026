@@ -34,10 +34,10 @@
     </script>
 
     <!-- jsPDF for PDF export (loaded async, non-blocking) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js" defer integrity="sha256-VffZ6ZuOLU4OGTsvAnVQHm2cHr0pytvqag2kioWH4+A=" crossorigin="anonymous"></script>
 
     <!-- Chart.js for admin analytics dashboard (loaded async, non-blocking) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer integrity="sha256-gf+v4Tw34bJXk7Ag1Eb02XOblJ2tt/n3nXCaDK14HC8=" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -118,6 +118,12 @@
                 <div class="bar-av" id="h-av" aria-hidden="true">U</div>
                 <span id="h-name">User</span>
             </div>
+            <div class="notif-wrap">
+                <button type="button" class="notif-bell" onclick="toggleNotifications()" aria-label="Notifications" title="Notifications">
+                    &#128276;<span class="notif-badge" id="notif-badge"></span>
+                </button>
+                <div class="notif-dropdown" id="notif-dropdown" role="menu" aria-label="Notifications"></div>
+            </div>
             <select class="lang-picker lang-picker-header" onchange="switchLanguage(this.value)" aria-label="Language">
                 <option value="en" selected>English</option>
                 <option value="pl">Polski</option>
@@ -158,6 +164,16 @@
             <button class="btn btn-o" onclick="hideSettingsModal()">Cancel</button>
         </div>
         <div class="msg-t" id="cp-msg" role="alert" aria-live="polite"></div>
+
+        <hr class="gdpr-sep">
+        <h3 class="ph">Privacy &amp; Data (GDPR)</h3>
+        <p class="gdpr-desc">Manage your personal data under UK GDPR.</p>
+        <div class="acts gdpr-acts">
+            <button class="btn btn-o" onclick="gdprExportData()" id="gdpr-export-btn">Export My Data</button>
+            <button class="btn btn-o" onclick="gdprViewPrivacy()">Privacy Policy</button>
+            <button class="btn btn-danger" onclick="gdprDeleteAccount()" id="gdpr-delete-btn">Delete My Account</button>
+        </div>
+        <div class="msg-t" id="gdpr-msg" role="alert" aria-live="polite"></div>
     </div>
 </div>
 

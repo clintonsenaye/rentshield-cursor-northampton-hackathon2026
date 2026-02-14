@@ -6,7 +6,9 @@ Handles standalone TTS requests.
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from typing import Dict, Any
 
 from models.schemas import TTSRequest
@@ -15,10 +17,12 @@ from services.ai_service import get_ai_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/tts", tags=["tts"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("")
-async def tts_endpoint(request: TTSRequest) -> Dict[str, Any]:
+@limiter.limit("5/minute")
+async def tts_endpoint(http_request: Request, request: TTSRequest) -> Dict[str, Any]:
     """
     Convert text to speech.
     

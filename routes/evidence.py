@@ -58,6 +58,24 @@ def _sanitize_filename(filename: str) -> str:
     return safe_name + ext
 
 
+# Magic byte signatures for allowed file types
+_MAGIC_BYTES = {
+    "image/jpeg": [b"\xff\xd8\xff"],
+    "image/png": [b"\x89PNG\r\n\x1a\n"],
+    "image/gif": [b"GIF87a", b"GIF89a"],
+    "image/webp": [b"RIFF"],  # RIFF....WEBP
+    "application/pdf": [b"%PDF"],
+}
+
+
+def _validate_magic_bytes(data: bytes, content_type: str) -> bool:
+    """Verify file content matches its declared MIME type via magic bytes."""
+    signatures = _MAGIC_BYTES.get(content_type)
+    if signatures is None:
+        return False
+    return any(data[:len(sig)] == sig for sig in signatures)
+
+
 @router.post("")
 async def upload_evidence(
     file: UploadFile = File(...),
@@ -95,6 +113,10 @@ async def upload_evidence(
     contents = await file.read()
     if len(contents) > MAX_UPLOAD_SIZE_BYTES:
         raise HTTPException(status_code=400, detail="File too large. Maximum size is 10 MB.")
+
+    # Validate file magic bytes match claimed content type
+    if not _validate_magic_bytes(contents, file.content_type or ""):
+        raise HTTPException(status_code=400, detail="File content does not match its declared type.")
 
     # Save file to disk
     evidence_id = str(uuid.uuid4())
@@ -188,15 +210,20 @@ def delete_evidence(
     if not evidence:
         raise HTTPException(status_code=404, detail="Evidence not found.")
 
-    # Delete file from disk
+    # Delete file from disk (with path traversal protection)
     file_url = evidence.get("file_url", "")
     if file_url:
-        file_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            file_url.lstrip("/")
+        file_path = os.path.realpath(
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                file_url.lstrip("/"),
+            )
         )
-        if os.path.exists(file_path):
+        # Ensure resolved path is within the upload directory
+        if file_path.startswith(os.path.realpath(UPLOAD_DIR)) and os.path.exists(file_path):
             os.remove(file_path)
+        elif not file_path.startswith(os.path.realpath(UPLOAD_DIR)):
+            logger.warning("Path traversal attempt blocked: %s", file_url)
 
     # Delete from database
     db["evidence"].delete_one({"evidence_id": evidence_id})

@@ -55,12 +55,33 @@ def authenticate_user(email: str, password: str) -> Optional[dict]:
     user = users_col.find_one({"email": email.lower().strip()})
 
     if not user:
-        logger.warning(f"Failed login attempt for non-existent email: {email[:3]}***")
+        logger.warning("Failed login attempt for non-existent email: %s***", email[:3])
         return None
 
+    # Check account lockout
+    lockout_until = user.get("lockout_until")
+    if lockout_until:
+        if isinstance(lockout_until, str):
+            try:
+                lockout_until = datetime.fromisoformat(lockout_until)
+            except (ValueError, TypeError):
+                lockout_until = None
+        if lockout_until and lockout_until.tzinfo is None:
+            lockout_until = lockout_until.replace(tzinfo=timezone.utc)
+        if lockout_until and datetime.now(timezone.utc) < lockout_until:
+            logger.warning("Login attempt on locked account: %s", user.get("user_id", "unknown"))
+            return None
+
     if not verify_password(password, user.get("password_hash", "")):
-        logger.warning(f"Failed login attempt (bad password) for user: {user.get('user_id', 'unknown')}")
+        _record_failed_attempt(users_col, user)
         return None
+
+    # Clear any failed login attempts on successful login
+    if user.get("failed_login_attempts", 0) > 0:
+        users_col.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"failed_login_attempts": 0}, "$unset": {"lockout_until": ""}},
+        )
 
     # Generate and store a new token with expiration
     token = generate_token()
@@ -83,7 +104,32 @@ def authenticate_user(email: str, password: str) -> Optional[dict]:
         "email": user["email"],
         "role": user["role"],
         "token": token,
+        "must_change_password": user.get("must_change_password", False),
     }
+
+
+# Account lockout settings
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_DURATION_MINUTES = 15
+
+
+def _record_failed_attempt(users_col, user: dict) -> None:
+    """Record a failed login attempt and lock the account if threshold is exceeded."""
+    attempts = user.get("failed_login_attempts", 0) + 1
+    update: dict = {"$set": {"failed_login_attempts": attempts}}
+    if attempts >= MAX_FAILED_ATTEMPTS:
+        lockout_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+        update["$set"]["lockout_until"] = lockout_until
+        logger.warning(
+            "Account locked for %s minutes due to %d failed attempts: %s",
+            LOCKOUT_DURATION_MINUTES, attempts, user.get("user_id", "unknown"),
+        )
+    else:
+        logger.warning(
+            "Failed login attempt %d/%d for user: %s",
+            attempts, MAX_FAILED_ATTEMPTS, user.get("user_id", "unknown"),
+        )
+    users_col.update_one({"_id": user["_id"]}, update)
 
 
 def get_current_user(token: str) -> Optional[dict]:

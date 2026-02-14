@@ -10,13 +10,16 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from database.connection import get_knowledge_base_collection
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.get("")
@@ -109,7 +112,8 @@ def get_article(article_id: str) -> Dict[str, Any]:
 
 
 @router.post("/{article_id}/helpful")
-def mark_helpful(article_id: str) -> Dict[str, str]:
+@limiter.limit("10/minute")
+def mark_helpful(request: Request, article_id: str) -> Dict[str, str]:
     """
     Increment the helpful count for an article.
     No authentication required — anyone can vote.

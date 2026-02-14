@@ -60,6 +60,13 @@ def login(request: Request, body: LoginRequest) -> LoginResponse:
     if not result:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
+    # Enforce must_change_password flag
+    if result.get("must_change_password"):
+        raise HTTPException(
+            status_code=403,
+            detail="Password change required. Please use the password reset flow.",
+        )
+
     return LoginResponse(
         token=result["token"],
         user_id=result["user_id"],
@@ -298,21 +305,44 @@ def delete_landlord(
     if not landlord:
         raise HTTPException(status_code=404, detail="Landlord not found.")
 
-    # Delete landlord's tenants first
+    # Collect tenant IDs for cascade deletion
+    tenant_ids = [
+        t["user_id"]
+        for t in users_col.find({"landlord_id": landlord_id, "role": "tenant"}, {"user_id": 1})
+    ]
+
+    # Cascade: delete tenant data across all collections
+    for tid in tenant_ids:
+        for col, field in [
+            ("evidence", "user_id"), ("conversations", "user_id"),
+            ("timeline", "user_id"), ("letters", "user_id"),
+            ("agreement_analyses", "user_id"), ("deposit_checks", "user_id"),
+            ("wellbeing_journal", "user_id"), ("rewards", "user_id"),
+            ("analytics", "user_id"), ("compliance", "user_id"),
+            ("perk_claims", "tenant_id"), ("notifications", "recipient_id"),
+        ]:
+            db[col].delete_many({field: tid})
+        db["maintenance"].delete_many({"tenant_id": tid})
+
+    # Delete landlord's tenants
     tenants_deleted = users_col.delete_many({"landlord_id": landlord_id, "role": "tenant"})
 
+    # Delete the landlord's own data
+    db["notifications"].delete_many({"recipient_id": landlord_id})
+    db["maintenance"].delete_many({"landlord_id": landlord_id})
+
     # Delete the landlord
-    result = users_col.delete_one({"user_id": landlord_id, "role": "landlord"})
+    users_col.delete_one({"user_id": landlord_id, "role": "landlord"})
 
     # Also clean up their tasks and perks
     tasks_deleted = db["tasks"].delete_many({"landlord_id": landlord_id})
     perks_deleted = db["perks"].delete_many({"landlord_id": landlord_id})
 
     logger.info(
-        f"AUDIT: Admin {user.get('user_id')} deleted landlord {landlord_id} "
-        f"(tenants removed: {tenants_deleted.deleted_count}, "
-        f"tasks removed: {tasks_deleted.deleted_count}, "
-        f"perks removed: {perks_deleted.deleted_count})"
+        "AUDIT: Admin %s deleted landlord %s "
+        "(tenants removed: %d, tasks removed: %d, perks removed: %d)",
+        user.get("user_id"), landlord_id, tenants_deleted.deleted_count,
+        tasks_deleted.deleted_count, perks_deleted.deleted_count,
     )
 
     return {

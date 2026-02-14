@@ -88,6 +88,7 @@ class ConversationService:
         detected_issue: str,
         urgency: str,
         user_type: str,
+        user_id: str = "",
     ) -> None:
         """
         Save a conversation exchange to MongoDB.
@@ -138,11 +139,13 @@ class ConversationService:
                         "detected_issue": detected_issue,
                         "urgency": urgency,
                         "user_type": user_type,
+                        "user_id": user_id,
                         "updated_at": now,
                     },
                     "$setOnInsert": {
                         "created_at": now,
                         "session_id": session_id,
+                        "user_id": user_id,
                     },
                 },
                 upsert=True,

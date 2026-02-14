@@ -3,7 +3,7 @@
    Provides offline support and caching for the PWA.
    ========================================================================== */
 
-const CACHE_NAME = 'rentshield-v8';
+const CACHE_NAME = 'rentshield-v12';
 
 /** Static assets to cache on install for offline support */
 const STATIC_ASSETS = [

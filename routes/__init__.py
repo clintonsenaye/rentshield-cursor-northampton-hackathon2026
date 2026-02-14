@@ -5,12 +5,21 @@ Contains all FastAPI route handlers organized by functionality.
 """
 
 from . import (
-    agreement, analytics, chat, deposit, evidence, letters, maintenance,
-    notice, perks, rewards, tasks, timeline, tts, users, wellbeing,
+    admin_analytics, agreement, analytics, case_export, chat, compliance,
+    dashboard, deadline_tracker, deposit, dispute_assessor, document_vault,
+    evidence, evidence_guide, gdpr, knowledge, letters, local_authority,
+    maintenance, messaging, notice, notice_calculator, notifications,
+    panic_button, perks, quiz, reminders, rent_comparator, reputation,
+    rewards, scenario_simulator, tasks, timeline, tts, users, wellbeing,
 )
 
 __all__ = [
-    "chat", "notice", "tts", "analytics", "wellbeing", "rewards",
-    "users", "tasks", "perks", "evidence", "timeline", "letters",
-    "agreement", "deposit", "maintenance",
+    "admin_analytics", "agreement", "analytics", "case_export", "chat",
+    "compliance", "dashboard", "deadline_tracker", "deposit",
+    "dispute_assessor", "document_vault", "evidence", "evidence_guide",
+    "gdpr", "knowledge", "letters", "local_authority", "maintenance",
+    "messaging", "notice", "notice_calculator", "notifications",
+    "panic_button", "perks", "quiz", "reminders", "rent_comparator",
+    "reputation", "rewards", "scenario_simulator", "tasks", "timeline",
+    "tts", "users", "wellbeing",
 ]

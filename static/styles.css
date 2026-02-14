@@ -1868,6 +1868,12 @@ select.inp { appearance: none; cursor: pointer; }
     margin-top: 20px;
 }
 
+/* GDPR section in settings modal */
+.modal-box .gdpr-sep { margin: 1.2rem 0; border-color: var(--bdr); }
+.modal-box .gdpr-desc { font-size: .85rem; color: var(--muted); margin-bottom: .8rem; }
+.modal-box .gdpr-acts { flex-direction: column; gap: .5rem; }
+.btn-danger { background: var(--err); color: #fff; }
+
 
 /* --------------------------------------------------------------------------
    16. PDF Export Button
@@ -1896,7 +1902,289 @@ select.inp { appearance: none; cursor: pointer; }
 
 
 /* --------------------------------------------------------------------------
-   17. Responsive
+   20. Dashboard
+   -------------------------------------------------------------------------- */
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.dash-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 14px;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+}
+
+.dash-card.dash-alert {
+    border-left: 3px solid var(--danger);
+    background: var(--danger-bg);
+}
+
+.dash-num {
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    color: var(--navy);
+    line-height: 1.2;
+}
+
+.dash-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    font-weight: 600;
+}
+
+.overdue-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger-border);
+}
+
+.ontime-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+[data-theme="dark"] .dash-num { color: var(--text); }
+
+
+/* --------------------------------------------------------------------------
+   21. Action Suggestions
+   -------------------------------------------------------------------------- */
+
+.action-suggestions {
+    max-width: 72%;
+    align-self: flex-start;
+    animation: fi .2s ease;
+}
+
+.action-suggestions-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.action-suggestions-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.action-suggestion-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--white);
+    color: var(--text-secondary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    box-shadow: var(--shadow-sm);
+}
+
+.action-suggestion-btn:hover {
+    border-color: var(--teal);
+    color: var(--teal);
+    box-shadow: var(--shadow);
+}
+
+
+/* --------------------------------------------------------------------------
+   22. Notifications
+   -------------------------------------------------------------------------- */
+
+.notif-wrap {
+    position: relative;
+}
+
+.notif-bell {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, .2);
+    border-radius: 6px;
+    padding: 5px 10px;
+    color: rgba(255, 255, 255, .6);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .15s;
+    position: relative;
+}
+
+.notif-bell:hover {
+    border-color: rgba(255, 255, 255, .5);
+    color: var(--white);
+}
+
+.notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--danger);
+    color: var(--white);
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 10px;
+    display: none;
+    min-width: 16px;
+    text-align: center;
+}
+
+.notif-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    width: 300px;
+    max-height: 360px;
+    overflow-y: auto;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    z-index: 500;
+}
+
+.notif-dropdown.open {
+    display: block;
+}
+
+.notif-item {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-light);
+    cursor: pointer;
+    transition: background .12s;
+}
+
+.notif-item:hover {
+    background: var(--bg);
+}
+
+.notif-item.unread {
+    background: var(--teal-light);
+}
+
+.notif-item.unread:hover {
+    background: #D6EFEC;
+}
+
+[data-theme="dark"] .notif-item.unread:hover {
+    background: #1F3D38;
+}
+
+.notif-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 2px;
+}
+
+.notif-msg {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.notif-empty {
+    padding: 24px 14px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.notif-footer {
+    padding: 10px 14px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--teal);
+    cursor: pointer;
+    border-top: 1px solid var(--border);
+}
+
+.notif-footer:hover {
+    background: var(--bg);
+}
+
+
+/* --------------------------------------------------------------------------
+   23. Form Elements (Notice Calculator, etc.)
+   -------------------------------------------------------------------------- */
+
+.form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 12px 0 4px;
+}
+
+.form-select,
+.form-input {
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    transition: all .15s;
+}
+
+.form-select:focus,
+.form-input:focus {
+    outline: none;
+    border-color: var(--teal);
+    background: var(--white);
+    box-shadow: 0 0 0 3px rgba(43, 138, 126, .08);
+}
+
+.form-select {
+    appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238C95A6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+}
+
+.form-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--teal);
+    vertical-align: middle;
+    margin-right: 6px;
+}
+
+
+/* --------------------------------------------------------------------------
+   24. Responsive
    -------------------------------------------------------------------------- */
 
 @media (max-width: 900px) {

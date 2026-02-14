@@ -147,6 +147,21 @@ async function getResponseError(response, fallback) {
 }
 
 /**
+ * Escape HTML special characters to prevent XSS when inserting into innerHTML.
+ * @param {string} str - The untrusted string to escape
+ * @returns {string} HTML-safe string
+ */
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
  * Build standard headers object for authenticated API requests.
  * @returns {Object} Headers with Content-Type and Authorization
  */
@@ -386,10 +401,10 @@ async function switchLanguage(lang) {
  */
 function updateStaticTranslations() {
     /* Header bar */
-    var settingsBtn = document.querySelector('.bar-out[onclick="openSettings()"]');
+    var settingsBtn = document.querySelector('.bar-out[onclick="showSettingsModal()"]');
     if (settingsBtn) settingsBtn.textContent = t('settings');
 
-    var signOutBtn = document.querySelector('.bar-out[onclick="signOut()"]');
+    var signOutBtn = document.querySelector('.bar-out[onclick="logout()"]');
     if (signOutBtn) signOutBtn.textContent = t('sign_out');
 
     /* Settings modal */
@@ -493,6 +508,13 @@ async function login() {
  * Log out: clear state, remove stored credentials, show auth screen.
  */
 function logout() {
+    // Revoke token server-side before clearing local state
+    if (authToken) {
+        fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + authToken },
+        }).catch(() => {});
+    }
     authToken = '';
     currentUser = null;
     localStorage.removeItem('rs_t');
@@ -532,6 +554,11 @@ function boot() {
     }
 
     initNavKeyboard();
+    loadNotifications();
+
+    // Poll for new notifications every 60 seconds
+    if (window._notifInterval) clearInterval(window._notifInterval);
+    window._notifInterval = setInterval(loadNotifications, 60000);
 }
 
 /**
@@ -582,6 +609,20 @@ function navigateTo(pageId) {
     if (pageId === 'll-compliance') loadCompliance();
     if (pageId === 'admin-analytics') loadAdminAnalytics();
     if (pageId === 'knowledge') loadKnowledgeBase();
+    if (pageId === 'home' || pageId === 'll-home') loadDashboard();
+    if (pageId === 'notice-calc') loadNoticeCalculator();
+    if (pageId === 'local-help') loadLocalHelp();
+    if (pageId === 'case-export') loadCaseExport();
+    if (pageId === 'quiz') loadQuiz();
+    if (pageId === 'scenarios') loadScenarios();
+    if (pageId === 'rent-compare') loadRentComparator();
+    if (pageId === 'dispute-assess') loadDisputeAssessor();
+    if (pageId === 'vault') loadDocumentVault();
+    if (pageId === 'deadlines') loadDeadlines();
+    if (pageId === 'messages') loadMessages();
+    if (pageId === 'emergency') loadEmergencyPage();
+    if (pageId === 'll-reminders') loadReminders();
+    if (pageId === 'll-reputation') loadReputation();
 
     /* Announce page change to screen readers */
     if (navButton) announceToScreenReader('Navigated to ' + navButton.textContent);
@@ -680,24 +721,37 @@ function buildNoticePageHtml(description) {
 /** Initialize the tenant dashboard with all pages. */
 function initTenant() {
     setNav([
+        { t: 'Dashboard', pg: 'home' },
+        { sep: 1 },
         { lbl: 'Legal Tools' },
         { t: 'AI Chat', pg: 'chat' },
         { t: 'Notice Checker', pg: 'notice' },
+        { t: 'Notice Calculator', pg: 'notice-calc' },
         { t: 'Knowledge Base', pg: 'knowledge' },
+        { t: 'Rights Quiz', pg: 'quiz' },
+        { t: 'Scenario Simulator', pg: 'scenarios' },
         { t: 'Letter Generator', pg: 'letters' },
         { t: 'Agreement Analyzer', pg: 'agreement' },
         { t: 'Deposit Checker', pg: 'deposit' },
+        { t: 'Rent Comparator', pg: 'rent-compare' },
         { sep: 1 },
         { lbl: 'My Case' },
+        { t: 'Case Strength', pg: 'dispute-assess' },
         { t: 'Evidence Locker', pg: 'evidence' },
+        { t: 'Document Vault', pg: 'vault' },
         { t: 'Dispute Timeline', pg: 'timeline' },
         { t: 'Maintenance', pg: 'maintenance' },
+        { t: 'Deadlines', pg: 'deadlines' },
+        { t: 'Messages', pg: 'messages' },
+        { t: 'Export Case File', pg: 'case-export' },
         { sep: 1 },
         { lbl: 'Wellbeing' },
         { t: 'Journal', pg: 'wellbeing' },
         { t: 'Rewards', pg: 'rewards' },
         { sep: 1 },
-        { lbl: 'Tasks' },
+        { lbl: 'Support' },
+        { t: 'Emergency', pg: 'emergency' },
+        { t: 'Local Help', pg: 'local-help' },
         { t: 'Tasks & Perks', pg: 't-tasks' }
     ]);
 
@@ -735,8 +789,12 @@ function initTenant() {
     );
 
     document.getElementById('pw').innerHTML =
-        '<div class="pg on" id="pg-chat">' + chatHtml + '</div>' +
+        '<div class="pg on" id="pg-home"><div class="ps" id="dashboard-container"><p class="empty">Loading dashboard...</p></div></div>' +
+        '<div class="pg" id="pg-chat">' + chatHtml + '</div>' +
         '<div class="pg" id="pg-notice">' + noticeHtml + '</div>' +
+        '<div class="pg" id="pg-notice-calc"><div class="ps" id="notice-calc-container"></div></div>' +
+        '<div class="pg" id="pg-local-help"><div class="ps" id="local-help-container"></div></div>' +
+        '<div class="pg" id="pg-case-export"><div class="ps" id="case-export-container"></div></div>' +
         '<div class="pg" id="pg-knowledge"><div class="ps" id="knowledge-container"><p class="empty">Loading...</p></div></div>' +
         '<div class="pg" id="pg-wellbeing">' +
             '<div class="ps" style="max-width:560px;margin:0 auto;width:100%">' +
@@ -818,6 +876,46 @@ function initTenant() {
         /* Maintenance Requests page */
         '<div class="pg" id="pg-maintenance">' +
             '<div class="ps" id="maintenance-container"><p class="empty">Loading...</p></div>' +
+        '</div>' +
+
+        /* Rights Quiz page */
+        '<div class="pg" id="pg-quiz">' +
+            '<div class="ps" id="quiz-container"><p class="empty">Loading...</p></div>' +
+        '</div>' +
+
+        /* Scenario Simulator page */
+        '<div class="pg" id="pg-scenarios">' +
+            '<div class="ps" id="scenarios-container"><p class="empty">Loading...</p></div>' +
+        '</div>' +
+
+        /* Rent Comparator page */
+        '<div class="pg" id="pg-rent-compare">' +
+            '<div class="ps" id="rent-compare-container"><p class="empty">Loading...</p></div>' +
+        '</div>' +
+
+        /* Dispute Strength Assessor page */
+        '<div class="pg" id="pg-dispute-assess">' +
+            '<div class="ps" id="dispute-assess-container"><p class="empty">Loading...</p></div>' +
+        '</div>' +
+
+        /* Document Vault page */
+        '<div class="pg" id="pg-vault">' +
+            '<div class="ps" id="vault-container"><p class="empty">Loading...</p></div>' +
+        '</div>' +
+
+        /* Deadline Tracker page */
+        '<div class="pg" id="pg-deadlines">' +
+            '<div class="ps" id="deadlines-container"><p class="empty">Loading...</p></div>' +
+        '</div>' +
+
+        /* Messages page */
+        '<div class="pg" id="pg-messages">' +
+            '<div class="ps" id="messages-container"><p class="empty">Loading...</p></div>' +
+        '</div>' +
+
+        /* Emergency Panic Button page */
+        '<div class="pg" id="pg-emergency">' +
+            '<div class="ps" id="emergency-container"><p class="empty">Loading...</p></div>' +
         '</div>';
 
     loadAnalytics();
@@ -826,17 +924,25 @@ function initTenant() {
 /** Initialize the landlord dashboard with all pages. */
 function initLandlord() {
     setNav([
+        { t: 'Dashboard', pg: 'll-home' },
+        { sep: 1 },
         { lbl: 'Manage' },
         { t: 'Tenants', pg: 'll-tenants' },
         { t: 'Tasks', pg: 'll-tasks' },
         { t: 'Perks', pg: 'll-perks' },
         { t: 'Maintenance', pg: 'll-maintenance' },
         { t: 'Compliance', pg: 'll-compliance' },
+        { t: 'Reminders', pg: 'll-reminders' },
+        { t: 'Messages', pg: 'messages' },
         { sep: 1 },
         { lbl: 'Legal Tools' },
         { t: 'AI Chat', pg: 'chat' },
         { t: 'Notice Checker', pg: 'notice' },
-        { t: 'Knowledge Base', pg: 'knowledge' }
+        { t: 'Knowledge Base', pg: 'knowledge' },
+        { t: 'Rights Quiz', pg: 'quiz' },
+        { t: 'Document Vault', pg: 'vault' },
+        { t: 'Deadlines', pg: 'deadlines' },
+        { t: 'Reputation', pg: 'll-reputation' }
     ]);
 
     var landlordQuickPrompts = [
@@ -859,16 +965,23 @@ function initLandlord() {
     var noticeHtml = buildNoticePageHtml('Check if a notice is legally valid.');
 
     document.getElementById('pw').innerHTML =
-        '<div class="pg on" id="pg-ll-tenants"><div class="ps" id="lltb"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg on" id="pg-ll-home"><div class="ps" id="dashboard-container"><p class="empty">Loading dashboard...</p></div></div>' +
+        '<div class="pg" id="pg-ll-tenants"><div class="ps" id="lltb"><p class="empty">Loading...</p></div></div>' +
         '<div class="pg" id="pg-ll-tasks"><div class="ps" id="lltkb"><p class="empty">Loading...</p></div></div>' +
         '<div class="pg" id="pg-ll-perks"><div class="ps" id="llpb"><p class="empty">Loading...</p></div></div>' +
         '<div class="pg" id="pg-chat">' + chatHtml + '</div>' +
         '<div class="pg" id="pg-notice">' + noticeHtml + '</div>' +
         '<div class="pg" id="pg-ll-maintenance"><div class="ps" id="ll-maint-container"><p class="empty">Loading...</p></div></div>' +
         '<div class="pg" id="pg-ll-compliance"><div class="ps" id="compliance-container"><p class="empty">Loading...</p></div></div>' +
-        '<div class="pg" id="pg-knowledge"><div class="ps" id="knowledge-container"><p class="empty">Loading...</p></div></div>';
+        '<div class="pg" id="pg-knowledge"><div class="ps" id="knowledge-container"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg" id="pg-ll-reminders"><div class="ps" id="reminders-container"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg" id="pg-messages"><div class="ps" id="messages-container"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg" id="pg-quiz"><div class="ps" id="quiz-container"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg" id="pg-vault"><div class="ps" id="vault-container"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg" id="pg-deadlines"><div class="ps" id="deadlines-container"><p class="empty">Loading...</p></div></div>' +
+        '<div class="pg" id="pg-ll-reputation"><div class="ps" id="reputation-container"><p class="empty">Loading...</p></div></div>';
 
-    loadLandlordPage('ll-tenants');
+    loadDashboard();
 }
 
 /** Initialize the admin dashboard. */
@@ -953,6 +1066,15 @@ async function sendMessage() {
         updateUrgencyBanner(data.urgency);
         updateIssueTracker(data.detected_issue);
         logRewardAction('rights_learned', data.detected_issue);
+        updateConversationMemory(data.detected_issue, data.urgency);
+
+        /* Show smart action suggestions based on detected issue */
+        var actionSuggestions = buildActionSuggestions(data.detected_issue);
+        if (actionSuggestions) {
+            var feed = document.getElementById('feed');
+            feed.appendChild(actionSuggestions);
+            feed.scrollTop = feed.scrollHeight;
+        }
 
     } catch (error) {
         document.getElementById('dots').classList.add('hidden');
@@ -988,7 +1110,11 @@ function addChatBubble(text, type, urgency, sources, confidence, disclaimer) {
 
     /* Add message content */
     var content = document.createElement('div');
-    content.innerHTML = (type === 'bot') ? formatMarkdown(text) : text;
+    if (type === 'bot') {
+        content.innerHTML = formatMarkdown(text);
+    } else {
+        content.textContent = text;
+    }
     bubble.appendChild(content);
 
     /* Add sources and confidence for bot messages */
@@ -1051,6 +1177,73 @@ function addChatBubble(text, type, urgency, sources, confidence, disclaimer) {
 
     feed.appendChild(bubble);
     feed.scrollTop = feed.scrollHeight;
+}
+
+/**
+ * Build smart action suggestion buttons based on detected issue type.
+ * Links users to existing features relevant to their situation.
+ * @param {string} detectedIssue - Issue type from the API response
+ * @returns {HTMLElement|null} Action buttons container, or null if none
+ */
+function buildActionSuggestions(detectedIssue) {
+    var suggestions = {
+        'illegal_eviction': [
+            { label: 'Collect Evidence', page: 'evidence', icon: '📁' },
+            { label: 'Log in Timeline', page: 'timeline', icon: '📅' },
+            { label: 'Generate Letter', page: 'letters', icon: '✉️' },
+            { label: 'Find Local Help', page: 'local-help', icon: '📍' },
+        ],
+        'eviction': [
+            { label: 'Check Notice Validity', page: 'notice-calc', icon: '📋' },
+            { label: 'Collect Evidence', page: 'evidence', icon: '📁' },
+            { label: 'Generate Letter', page: 'letters', icon: '✉️' },
+        ],
+        'deposit': [
+            { label: 'Check Deposit Protection', page: 'deposit', icon: '🛡️' },
+            { label: 'Generate Letter', page: 'letters', icon: '✉️' },
+        ],
+        'repairs': [
+            { label: 'Report Maintenance', page: 'maintenance', icon: '🔧' },
+            { label: 'Collect Evidence', page: 'evidence', icon: '📁' },
+            { label: 'Generate Letter', page: 'letters', icon: '✉️' },
+        ],
+        'rent_increase': [
+            { label: 'Check Notice Validity', page: 'notice-calc', icon: '📋' },
+            { label: 'Find Local Help', page: 'local-help', icon: '📍' },
+        ],
+        'discrimination': [
+            { label: 'Collect Evidence', page: 'evidence', icon: '📁' },
+            { label: 'Log in Timeline', page: 'timeline', icon: '📅' },
+            { label: 'Find Local Help', page: 'local-help', icon: '📍' },
+        ],
+    };
+
+    var actions = suggestions[detectedIssue];
+    if (!actions || actions.length === 0) return null;
+
+    var container = document.createElement('div');
+    container.className = 'action-suggestions';
+    container.setAttribute('role', 'group');
+    container.setAttribute('aria-label', 'Suggested next steps');
+
+    var label = document.createElement('div');
+    label.className = 'action-suggestions-label';
+    label.textContent = 'Suggested next steps:';
+    container.appendChild(label);
+
+    var btnGroup = document.createElement('div');
+    btnGroup.className = 'action-suggestions-buttons';
+
+    actions.forEach(function(action) {
+        var btn = document.createElement('button');
+        btn.className = 'action-suggestion-btn';
+        btn.textContent = action.icon + ' ' + action.label;
+        btn.onclick = function() { navigateTo(action.page); };
+        btnGroup.appendChild(btn);
+    });
+
+    container.appendChild(btnGroup);
+    return container;
 }
 
 /**
@@ -1426,9 +1619,9 @@ async function loadRewards() {
             badgeGrid.innerHTML = ALL_BADGES.map(function(badge) {
                 var isEarned = earnedBadgeIds.includes(badge.id);
                 return '<div class="b-card ' + (isEarned ? 'earned' : 'locked') + '">' +
-                    '<div class="b-icon">' + badge.name.charAt(0) + '</div>' +
-                    '<div class="b-name">' + badge.name + '</div>' +
-                    '<div class="b-desc">' + badge.description + '</div>' +
+                    '<div class="b-icon">' + escapeHtml(badge.name.charAt(0)) + '</div>' +
+                    '<div class="b-name">' + escapeHtml(badge.name) + '</div>' +
+                    '<div class="b-desc">' + escapeHtml(badge.description) + '</div>' +
                 '</div>';
             }).join('');
         }
@@ -1437,8 +1630,8 @@ async function loadRewards() {
         var voucherContainer = document.getElementById('rv');
         if (voucherContainer && (data.vouchers || []).length) {
             voucherContainer.innerHTML = data.vouchers.map(function(voucher) {
-                return '<div class="card"><h4 style="color:var(--success)">' + (voucher.title || 'Voucher') +
-                    '</h4><p>' + (voucher.description || '') + '</p></div>';
+                return '<div class="card"><h4 style="color:var(--success)">' + escapeHtml(voucher.title || 'Voucher') +
+                    '</h4><p>' + escapeHtml(voucher.description || '') + '</p></div>';
             }).join('');
         }
     } catch (error) {
@@ -1643,12 +1836,12 @@ async function loadLandlordPage(page) {
                 (tenants.length
                     ? tenants.map(function(tenant) {
                         return '<div class="card">' +
-                            '<h4>' + tenant.name + '</h4>' +
-                            '<p>' + tenant.email + '</p>' +
-                            '<div class="meta">' + (tenant.property_address || 'No address') + ' &middot; ' + (tenant.points || 0) + ' pts</div>' +
+                            '<h4>' + escapeHtml(tenant.name) + '</h4>' +
+                            '<p>' + escapeHtml(tenant.email) + '</p>' +
+                            '<div class="meta">' + escapeHtml(tenant.property_address || 'No address') + ' &middot; ' + (tenant.points || 0) + ' pts</div>' +
                             '<div class="acts">' +
-                                '<button class="btn btn-o btn-sm" onclick="generateResetToken(\'' + tenant.email + '\')">Reset Password</button>' +
-                                '<button class="btn btn-d btn-sm" onclick="removeTenant(\'' + tenant.user_id + '\')">Remove</button>' +
+                                '<button class="btn btn-o btn-sm" onclick="generateResetToken(\'' + escapeHtml(tenant.email) + '\')">Reset Password</button>' +
+                                '<button class="btn btn-d btn-sm" onclick="removeTenant(\'' + escapeHtml(tenant.user_id) + '\')">Remove</button>' +
                             '</div>' +
                         '</div>';
                     }).join('')
@@ -4073,6 +4266,82 @@ document.addEventListener('keydown', function(event) {
 
 
 /* --------------------------------------------------------------------------
+   16b. GDPR Data Rights
+   -------------------------------------------------------------------------- */
+
+/** Export all personal data (GDPR Subject Access Request). */
+async function gdprExportData() {
+    var btn = document.getElementById('gdpr-export-btn');
+    var msg = document.getElementById('gdpr-msg');
+    btn.disabled = true;
+    msg.textContent = 'Preparing export...';
+    msg.className = 'msg-t';
+    try {
+        var res = await fetch('/api/gdpr/export', { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('Export failed');
+        var data = await res.json();
+        var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'rentshield_data_export.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        msg.textContent = 'Data exported successfully.';
+        msg.className = 'msg-t msg-ok';
+    } catch (e) {
+        msg.textContent = 'Failed to export data. Please try again.';
+        msg.className = 'msg-t msg-err';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/** View the privacy policy in a new tab. */
+function gdprViewPrivacy() {
+    window.open('/api/gdpr/privacy-policy', '_blank');
+}
+
+/** Delete account and all associated data (GDPR Right to Erasure). */
+async function gdprDeleteAccount() {
+    var msg = document.getElementById('gdpr-msg');
+    msg.textContent = '';
+
+    var pw = prompt('This will permanently delete your account and all data.\n\nEnter your password to confirm:');
+    if (!pw) return;
+
+    if (!confirm('Are you absolutely sure? This action cannot be undone.')) return;
+
+    var btn = document.getElementById('gdpr-delete-btn');
+    btn.disabled = true;
+    msg.textContent = 'Deleting account...';
+    msg.className = 'msg-t';
+
+    try {
+        var res = await fetch('/api/gdpr/account', {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ password: pw }),
+        });
+        var data = await res.json();
+        if (!res.ok) {
+            msg.textContent = data.detail || 'Deletion failed.';
+            msg.className = 'msg-t msg-err';
+            btn.disabled = false;
+            return;
+        }
+        msg.textContent = 'Account deleted. Logging out...';
+        msg.className = 'msg-t msg-ok';
+        setTimeout(logout, 1500);
+    } catch (e) {
+        msg.textContent = 'Connection error. Please try again.';
+        msg.className = 'msg-t msg-err';
+        btn.disabled = false;
+    }
+}
+
+
+/* --------------------------------------------------------------------------
    17. PDF Export
    -------------------------------------------------------------------------- */
 
@@ -5003,7 +5272,1263 @@ function renderUrgencyChart(urgency) {
 
 
 /* --------------------------------------------------------------------------
-   21. Auto-boot (resume session if token exists)
+   21. Dashboard Home Screen
+   -------------------------------------------------------------------------- */
+
+async function loadDashboard() {
+    var container = document.getElementById('dashboard-container');
+    if (!container) return;
+    container.innerHTML = '<p class="empty">Loading dashboard...</p>';
+
+    try {
+        var resp = await fetch('/api/dashboard', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed to load dashboard');
+        var data = await resp.json();
+
+        var html = '<h2 class="ph">Dashboard</h2>';
+        html += '<p class="pp">Welcome back, ' + (data.name || currentUser.name || '') + '</p>';
+
+        if (data.role === 'tenant') {
+            html += '<div class="dashboard-grid">';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.overdue_maintenance_count || 0) + '</div><div class="dash-label">Overdue Repairs</div></div>';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.pending_tasks || 0) + '</div><div class="dash-label">Pending Tasks</div></div>';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.total_points || 0) + '</div><div class="dash-label">Points</div></div>';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.wellbeing_streak || 0) + '</div><div class="dash-label">Day Streak</div></div>';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.evidence_count || 0) + '</div><div class="dash-label">Evidence Items</div></div>';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.conversation_count || 0) + '</div><div class="dash-label">Conversations</div></div>';
+            html += '</div>';
+
+            if (data.active_maintenance && data.active_maintenance.length > 0) {
+                html += '<div class="sec" style="margin-top:20px">Active Maintenance Requests</div>';
+                data.active_maintenance.forEach(function(req) {
+                    var badge = req.is_overdue ? '<span class="overdue-badge">OVERDUE</span>' : '<span class="ontime-badge">On Track</span>';
+                    html += '<div class="card" style="margin-bottom:8px"><strong>' + escapeHtml(req.category_name || '') + '</strong> ' + badge + '<br><span style="font-size:13px;color:var(--text-secondary)">' + escapeHtml((req.description || '').substring(0, 80)) + '</span></div>';
+                });
+            }
+        } else if (data.role === 'landlord') {
+            html += '<div class="dashboard-grid">';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.tenant_count || 0) + '</div><div class="dash-label">Tenants</div></div>';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.open_maintenance || 0) + '</div><div class="dash-label">Open Requests</div></div>';
+            html += '<div class="dash-card' + (data.overdue_maintenance > 0 ? ' dash-alert' : '') + '"><div class="dash-num">' + (data.overdue_maintenance || 0) + '</div><div class="dash-label">Overdue</div></div>';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.pending_verifications || 0) + '</div><div class="dash-label">Pending Approvals</div></div>';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.compliance_score || 0) + '%</div><div class="dash-label">Compliance</div></div>';
+            html += '<div class="dash-card"><div class="dash-num">' + (data.pending_perk_claims || 0) + '</div><div class="dash-label">Perk Claims</div></div>';
+            html += '</div>';
+        }
+
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<p class="empty">Could not load dashboard.</p>';
+    }
+}
+
+/* --------------------------------------------------------------------------
+   22. Notifications
+   -------------------------------------------------------------------------- */
+
+async function loadNotifications() {
+    try {
+        var resp = await fetch('/api/notifications', { headers: getAuthHeaders() });
+        if (!resp.ok) return;
+        var data = await resp.json();
+
+        var badge = document.getElementById('notif-badge');
+        if (badge) {
+            if (data.unread_count > 0) {
+                badge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        var dropdown = document.getElementById('notif-dropdown');
+        if (dropdown && dropdown.classList.contains('open')) {
+            renderNotifications(data.notifications);
+        }
+    } catch (e) { /* silent */ }
+}
+
+function renderNotifications(notifications) {
+    var dropdown = document.getElementById('notif-dropdown');
+    if (!dropdown) return;
+
+    if (!notifications || notifications.length === 0) {
+        dropdown.innerHTML = '<div class="notif-empty">No notifications</div>';
+        return;
+    }
+
+    dropdown.innerHTML = '';
+    notifications.slice(0, 10).forEach(function(n) {
+        var item = document.createElement('div');
+        item.className = n.is_read ? 'notif-item read' : 'notif-item unread';
+        var title = document.createElement('div');
+        title.className = 'notif-title';
+        title.textContent = n.title;
+        var msg = document.createElement('div');
+        msg.className = 'notif-msg';
+        msg.textContent = n.message;
+        item.appendChild(title);
+        item.appendChild(msg);
+        item.addEventListener('click', function() {
+            handleNotifClick(n.notification_id, n.link_to || '');
+        });
+        dropdown.appendChild(item);
+    });
+    var footer = document.createElement('div');
+    footer.className = 'notif-footer';
+    footer.textContent = 'Mark all as read';
+    footer.addEventListener('click', markAllNotificationsRead);
+    dropdown.appendChild(footer);
+}
+
+function toggleNotifications() {
+    var dropdown = document.getElementById('notif-dropdown');
+    if (!dropdown) return;
+    dropdown.classList.toggle('open');
+    if (dropdown.classList.contains('open')) loadNotifications();
+}
+
+async function handleNotifClick(notifId, linkTo) {
+    try {
+        await fetch('/api/notifications/' + notifId + '/read', { method: 'POST', headers: getAuthHeaders() });
+    } catch (e) { /* silent */ }
+    if (linkTo) navigateTo(linkTo);
+    loadNotifications();
+}
+
+async function markAllNotificationsRead() {
+    try {
+        await fetch('/api/notifications/read-all', { method: 'POST', headers: getAuthHeaders() });
+    } catch (e) { /* silent */ }
+    loadNotifications();
+}
+
+/* --------------------------------------------------------------------------
+   23. Notice Validity Calculator
+   -------------------------------------------------------------------------- */
+
+function loadNoticeCalculator() {
+    var container = document.getElementById('notice-calc-container');
+    if (!container) return;
+
+    container.innerHTML =
+        '<h2 class="ph">Notice Validity Calculator</h2>' +
+        '<p class="pp">Check if a landlord notice meets legal requirements using deterministic rules (no AI guesswork).</p>' +
+        '<div class="card">' +
+            '<label class="form-label">Notice Type</label>' +
+            '<select id="nc-type" class="form-select">' +
+                '<option value="landlord_notice_to_end">Landlord Notice to End Tenancy</option>' +
+                '<option value="section_8">Section 8 (Fault-Based)</option>' +
+                '<option value="rent_increase">Section 13 (Rent Increase)</option>' +
+                '<option value="tenant_notice">Tenant Notice to Leave</option>' +
+            '</select>' +
+            '<label class="form-label">Date You Received the Notice</label>' +
+            '<input type="date" id="nc-received" class="form-input">' +
+            '<label class="form-label">Date You Must Leave / Pay By</label>' +
+            '<input type="date" id="nc-effective" class="form-input">' +
+            '<label class="form-label">Tenancy Start Date (optional)</label>' +
+            '<input type="date" id="nc-tenancy-start" class="form-input">' +
+            '<label class="form-label" style="margin-top:10px">' +
+                '<input type="checkbox" id="nc-prescribed"> Landlord has provided all prescribed information (Gas Safety, EPC, How to Rent guide)' +
+            '</label>' +
+            '<button class="btn btn-p" onclick="runNoticeCalculator()" style="margin-top:14px">Check Validity</button>' +
+        '</div>' +
+        '<div id="nc-result"></div>';
+}
+
+async function runNoticeCalculator() {
+    var resultDiv = document.getElementById('nc-result');
+    resultDiv.innerHTML = '<p class="empty">Checking...</p>';
+
+    var body = {
+        notice_type: document.getElementById('nc-type').value,
+        date_received: document.getElementById('nc-received').value,
+        effective_date: document.getElementById('nc-effective').value,
+        tenancy_start_date: document.getElementById('nc-tenancy-start').value || '',
+        has_prescribed_info: document.getElementById('nc-prescribed').checked,
+        ground: 'default'
+    };
+
+    if (!body.date_received || !body.effective_date) {
+        resultDiv.innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">Please enter both dates.</div>';
+        return;
+    }
+
+    try {
+        var resp = await fetch('/api/notice-calculator/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) {
+            var err = await resp.json();
+            resultDiv.innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">' + (err.detail || 'Error') + '</div>';
+            return;
+        }
+        var data = await resp.json();
+
+        var color = data.is_valid ? 'var(--success)' : 'var(--danger)';
+        var verdict = data.is_valid ? 'APPEARS VALID' : 'POTENTIAL ISSUES FOUND';
+
+        var html = '<div class="card" style="border-left:4px solid ' + color + ';margin-top:14px">';
+        html += '<h3 style="color:' + color + '">' + verdict + '</h3>';
+        html += '<p><strong>Notice type:</strong> ' + data.notice_type_name + '</p>';
+        html += '<p><strong>Notice given:</strong> ' + data.actual_notice_given_days + ' days</p>';
+        html += '<p><strong>Minimum required:</strong> ' + data.minimum_notice_required_days + ' days</p>';
+
+        if (data.problems.length > 0) {
+            html += '<div class="sec" style="margin-top:12px;color:var(--danger)">Problems Found</div><ul>';
+            data.problems.forEach(function(p) { html += '<li>' + p + '</li>'; });
+            html += '</ul>';
+        }
+
+        html += '<div class="sec" style="margin-top:12px">What You Should Do</div><ul>';
+        data.actions.forEach(function(a) { html += '<li>' + a + '</li>'; });
+        html += '</ul>';
+
+        html += '<div class="sec" style="margin-top:12px">Legal Requirements for This Notice Type</div><ul>';
+        data.prescribed_requirements.forEach(function(r) { html += '<li>' + r + '</li>'; });
+        html += '</ul>';
+
+        html += '<p style="font-size:12px;color:var(--text-secondary);margin-top:10px">Source: ' + data.source + '</p>';
+        html += '</div>';
+
+        resultDiv.innerHTML = html;
+    } catch (e) {
+        resultDiv.innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">Could not check notice. Please try again.</div>';
+    }
+}
+
+/* --------------------------------------------------------------------------
+   24. Local Authority Lookup
+   -------------------------------------------------------------------------- */
+
+function loadLocalHelp() {
+    var container = document.getElementById('local-help-container');
+    if (!container) return;
+
+    container.innerHTML =
+        '<h2 class="ph">Find Local Help</h2>' +
+        '<p class="pp">Enter your postcode to find your local council and housing support services.</p>' +
+        '<div class="card">' +
+            '<div style="display:flex;gap:8px">' +
+                '<input type="text" id="la-postcode" class="form-input" placeholder="e.g. SW1A 1AA or M1" style="flex:1" maxlength="10">' +
+                '<button class="btn btn-p" onclick="lookupLocalAuthority()">Search</button>' +
+            '</div>' +
+        '</div>' +
+        '<div id="la-result"></div>' +
+        '<div id="la-helplines"></div>';
+
+    loadNationalHelplines();
+}
+
+async function lookupLocalAuthority() {
+    var postcode = document.getElementById('la-postcode').value.trim();
+    var resultDiv = document.getElementById('la-result');
+
+    if (!postcode) {
+        resultDiv.innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">Please enter a postcode.</div>';
+        return;
+    }
+
+    resultDiv.innerHTML = '<p class="empty">Searching...</p>';
+
+    try {
+        var resp = await fetch('/api/local-authority/lookup?postcode=' + encodeURIComponent(postcode));
+        if (!resp.ok) {
+            var err = await resp.json();
+            resultDiv.innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">' + (err.detail || 'Error') + '</div>';
+            return;
+        }
+        var data = await resp.json();
+
+        var html = '<div class="card" style="margin-top:14px">';
+        html += '<h3>Your Local Council</h3>';
+        html += '<p><strong>' + data.local_council + '</strong></p>';
+
+        if (data.local_services.length > 0) {
+            data.local_services.forEach(function(s) {
+                html += '<div style="margin-top:10px;padding:8px;background:var(--bg);border-radius:6px">';
+                html += '<strong>' + s.name + '</strong><br>';
+                html += '<span style="font-size:13px;color:var(--text-secondary)">' + s.description + '</span><br>';
+                html += '<span style="font-size:12px;color:var(--primary)">' + s.action + '</span>';
+                html += '</div>';
+            });
+        }
+
+        if (data.note) {
+            html += '<p style="font-size:12px;color:var(--text-secondary);margin-top:10px">' + data.note + '</p>';
+        }
+        html += '</div>';
+
+        resultDiv.innerHTML = html;
+    } catch (e) {
+        resultDiv.innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">Could not look up postcode.</div>';
+    }
+}
+
+async function loadNationalHelplines() {
+    try {
+        var resp = await fetch('/api/local-authority/helplines');
+        if (!resp.ok) return;
+        var data = await resp.json();
+        var container = document.getElementById('la-helplines');
+        if (!container) return;
+
+        var html = '<div class="sec" style="margin-top:20px">National Helplines</div>';
+        data.helplines.forEach(function(h) {
+            html += '<div class="card" style="margin-bottom:8px">';
+            html += '<strong>' + h.name + '</strong>';
+            if (h.phone) html += ' — <a href="tel:' + h.phone.replace(/\s/g, '') + '">' + h.phone + '</a>';
+            html += '<br><span style="font-size:13px;color:var(--text-secondary)">' + h.description + '</span>';
+            if (h.hours) html += '<br><span style="font-size:12px">' + h.hours + '</span>';
+            html += '</div>';
+        });
+        container.innerHTML = html;
+    } catch (e) { /* silent */ }
+}
+
+/* --------------------------------------------------------------------------
+   25. Case Export
+   -------------------------------------------------------------------------- */
+
+async function loadCaseExport() {
+    var container = document.getElementById('case-export-container');
+    if (!container) return;
+
+    container.innerHTML =
+        '<h2 class="ph">Export Case File</h2>' +
+        '<p class="pp">Download a complete bundle of all your evidence, timeline, letters, chat history, and maintenance requests — ready for a solicitor or tribunal.</p>' +
+        '<div class="card">' +
+            '<button class="btn btn-p" onclick="downloadCaseBundle()" id="export-btn">Export My Case File (JSON)</button>' +
+            '<p style="font-size:12px;color:var(--text-secondary);margin-top:8px">This may take a moment to compile all your data.</p>' +
+        '</div>' +
+        '<div id="export-summary"></div>';
+}
+
+async function downloadCaseBundle() {
+    var btn = document.getElementById('export-btn');
+    btn.disabled = true;
+    btn.textContent = 'Compiling...';
+
+    try {
+        var resp = await fetch('/api/case-export', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Export failed');
+        var data = await resp.json();
+
+        /* Show summary */
+        var summary = data.summary;
+        var summaryHtml = '<div class="card" style="margin-top:14px"><h3>Export Summary</h3>';
+        summaryHtml += '<p>Evidence items: ' + summary.total_evidence + '</p>';
+        summaryHtml += '<p>Timeline events: ' + summary.total_timeline_events + '</p>';
+        summaryHtml += '<p>Letters: ' + summary.total_letters + '</p>';
+        summaryHtml += '<p>Maintenance requests: ' + summary.total_maintenance_requests + '</p>';
+        summaryHtml += '<p>Conversations: ' + summary.total_conversations + '</p>';
+        summaryHtml += '</div>';
+        document.getElementById('export-summary').innerHTML = summaryHtml;
+
+        /* Trigger download */
+        var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'rentshield-case-export-' + new Date().toISOString().split('T')[0] + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+
+        btn.textContent = 'Export Complete — Download Again';
+    } catch (e) {
+        document.getElementById('export-summary').innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">Export failed. Please try again.</div>';
+        btn.textContent = 'Retry Export';
+    }
+    btn.disabled = false;
+}
+
+/* --------------------------------------------------------------------------
+   26. Conversation Memory (persistent user context)
+   -------------------------------------------------------------------------- */
+
+/* Store key facts from conversations in localStorage for cross-session context */
+function updateConversationMemory(detectedIssue, urgency) {
+    var memory = JSON.parse(localStorage.getItem('rs_memory') || '{}');
+
+    if (!memory.issues) memory.issues = {};
+    if (!memory.issues[detectedIssue]) memory.issues[detectedIssue] = 0;
+    memory.issues[detectedIssue]++;
+
+    if (urgency === 'critical' || urgency === 'high') {
+        memory.lastUrgentIssue = detectedIssue;
+        memory.lastUrgentDate = new Date().toISOString();
+    }
+
+    memory.lastActivity = new Date().toISOString();
+    memory.totalQueries = (memory.totalQueries || 0) + 1;
+
+    localStorage.setItem('rs_memory', JSON.stringify(memory));
+}
+
+/* --------------------------------------------------------------------------
+   27. Interactive Rights Quiz
+   -------------------------------------------------------------------------- */
+
+/** Current quiz state */
+var quizQuestions = [];
+var quizCurrentIndex = 0;
+var quizAnswered = {};
+
+async function loadQuiz() {
+    var container = document.getElementById('quiz-container');
+    container.innerHTML = '<h2 class="ph">Rights Quiz</h2><p class="pp">Test your knowledge of UK renting rights with real-world scenarios. Earn 10 points for each correct answer!</p><div id="quiz-progress-bar"></div><div id="quiz-area"><p class="empty">Loading questions...</p></div>';
+
+    try {
+        var resp = await fetch('/api/quiz/questions', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed to load quiz');
+        quizQuestions = await resp.json();
+        quizCurrentIndex = 0;
+        quizAnswered = {};
+
+        /* Also load progress */
+        var progResp = await fetch('/api/quiz/progress', { headers: getAuthHeaders() });
+        var progress = progResp.ok ? await progResp.json() : null;
+
+        var progressHtml = '';
+        if (progress && progress.total_answered > 0) {
+            progressHtml = '<div class="card" style="margin-bottom:16px"><div style="display:flex;justify-content:space-around;text-align:center">' +
+                '<div><div style="font-size:24px;font-weight:700;color:var(--primary)">' + progress.total_correct + '/' + progress.total_answered + '</div><div style="font-size:12px;color:var(--text-secondary)">Correct</div></div>' +
+                '<div><div style="font-size:24px;font-weight:700;color:var(--success)">' + progress.accuracy_pct + '%</div><div style="font-size:12px;color:var(--text-secondary)">Accuracy</div></div>' +
+                '<div><div style="font-size:24px;font-weight:700;color:var(--warning)">' + progress.points_earned + '</div><div style="font-size:12px;color:var(--text-secondary)">Points Earned</div></div>' +
+            '</div></div>';
+        }
+        document.getElementById('quiz-progress-bar').innerHTML = progressHtml;
+
+        renderQuizQuestion();
+    } catch (e) {
+        container.innerHTML = '<h2 class="ph">Rights Quiz</h2><p class="empty">Failed to load quiz. Please try again.</p>';
+    }
+}
+
+function renderQuizQuestion() {
+    var area = document.getElementById('quiz-area');
+    if (quizCurrentIndex >= quizQuestions.length) {
+        area.innerHTML = '<div class="card" style="text-align:center;padding:30px">' +
+            '<h3>Quiz Complete!</h3>' +
+            '<p>You\'ve answered all ' + quizQuestions.length + ' questions.</p>' +
+            '<button class="btn btn-p" onclick="quizCurrentIndex=0;quizAnswered={};renderQuizQuestion()">Retake Quiz</button>' +
+        '</div>';
+        return;
+    }
+
+    var q = quizQuestions[quizCurrentIndex];
+    var html = '<div class="card">' +
+        '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">Question ' + (quizCurrentIndex + 1) + ' of ' + quizQuestions.length + ' — ' + escapeHtml(q.category.replace(/_/g, ' ')) + '</div>' +
+        '<div style="background:var(--bg-secondary);padding:12px;border-radius:8px;margin-bottom:12px;font-style:italic">' + escapeHtml(q.scenario) + '</div>' +
+        '<h4 style="margin-bottom:12px">' + escapeHtml(q.question) + '</h4>' +
+        '<div id="quiz-options">';
+
+    q.options.forEach(function(opt, i) {
+        html += '<button class="btn btn-o quiz-opt" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 14px" data-idx="' + i + '" onclick="submitQuizAnswer(\'' + q.id + '\',' + i + ')">' +
+            '<strong>' + String.fromCharCode(65 + i) + '.</strong> ' + escapeHtml(opt) +
+        '</button>';
+    });
+
+    html += '</div><div id="quiz-feedback"></div>' +
+        '<div style="display:flex;justify-content:space-between;margin-top:12px">' +
+            '<span style="font-size:12px;color:var(--text-secondary)">' + Object.keys(quizAnswered).length + ' answered</span>' +
+        '</div></div>';
+
+    area.innerHTML = html;
+}
+
+async function submitQuizAnswer(questionId, selectedOption) {
+    if (quizAnswered[questionId] !== undefined) return;
+    quizAnswered[questionId] = selectedOption;
+
+    /* Disable all options */
+    document.querySelectorAll('.quiz-opt').forEach(function(btn) { btn.disabled = true; });
+
+    try {
+        var resp = await fetch('/api/quiz/answer', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ question_id: questionId, selected_option: selectedOption })
+        });
+        if (!resp.ok) throw new Error('Failed to submit answer');
+        var data = await resp.json();
+
+        /* Highlight correct/incorrect */
+        document.querySelectorAll('.quiz-opt').forEach(function(btn) {
+            var idx = parseInt(btn.getAttribute('data-idx'));
+            if (idx === data.correct_option) {
+                btn.style.borderColor = 'var(--success)';
+                btn.style.background = 'rgba(39, 134, 74, 0.1)';
+            } else if (idx === selectedOption && !data.correct) {
+                btn.style.borderColor = 'var(--danger)';
+                btn.style.background = 'rgba(192, 57, 43, 0.1)';
+            }
+        });
+
+        /* Show feedback */
+        var feedbackHtml = '<div class="card" style="margin-top:12px;border-left:3px solid ' + (data.correct ? 'var(--success)' : 'var(--danger)') + '">' +
+            '<strong>' + (data.correct ? 'Correct! +' + data.points_earned + ' points' : 'Incorrect') + '</strong>' +
+            '<p style="margin-top:8px">' + escapeHtml(data.explanation) + '</p>' +
+            '<p style="font-size:12px;color:var(--text-secondary);margin-top:4px">Source: ' + escapeHtml(data.source) + '</p>' +
+            '<button class="btn btn-p" style="margin-top:10px" onclick="quizCurrentIndex++;renderQuizQuestion()">Next Question</button>' +
+        '</div>';
+        document.getElementById('quiz-feedback').innerHTML = feedbackHtml;
+
+    } catch (e) {
+        document.getElementById('quiz-feedback').innerHTML = '<p class="empty">Failed to submit answer.</p>';
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   28. AI Scenario Simulator
+   -------------------------------------------------------------------------- */
+
+async function loadScenarios() {
+    var container = document.getElementById('scenarios-container');
+    container.innerHTML = '<h2 class="ph">Scenario Simulator</h2><p class="pp">Explore "What would happen if..." scenarios with step-by-step legal outcomes.</p><div id="scenario-templates"></div><div id="scenario-custom"></div><div id="scenario-result"></div>';
+
+    try {
+        var resp = await fetch('/api/scenarios/templates', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed to load');
+        var templates = await resp.json();
+
+        var html = '<div class="sec">Choose a Scenario</div><div class="grid">';
+        templates.forEach(function(t) {
+            html += '<div class="card" style="cursor:pointer" onclick="runScenario(\'' + t.id + '\')">' +
+                '<h4>' + escapeHtml(t.title) + '</h4>' +
+                '<p style="font-size:13px;color:var(--text-secondary)">' + escapeHtml(t.description) + '</p>' +
+                '<span class="badge">' + escapeHtml(t.category) + '</span>' +
+            '</div>';
+        });
+        html += '</div>';
+
+        html += '<div class="sec" style="margin-top:18px">Or Describe Your Own</div>' +
+            '<textarea class="n-ta" id="custom-scenario" placeholder="Describe a situation... e.g., What would happen if my landlord refuses to return my deposit?" style="min-height:80px"></textarea>' +
+            '<button class="btn btn-p" onclick="runScenario(null)">Simulate Scenario</button>';
+
+        document.getElementById('scenario-templates').innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<h2 class="ph">Scenario Simulator</h2><p class="empty">Failed to load scenarios.</p>';
+    }
+}
+
+async function runScenario(scenarioId) {
+    var resultEl = document.getElementById('scenario-result');
+    resultEl.innerHTML = '<div class="card"><p class="empty">Simulating scenario... This may take a moment.</p></div>';
+
+    var body = {};
+    if (scenarioId) {
+        body.scenario_id = scenarioId;
+    } else {
+        var custom = document.getElementById('custom-scenario').value.trim();
+        if (!custom) { resultEl.innerHTML = '<p class="empty">Please describe a scenario first.</p>'; return; }
+        body.custom_scenario = custom;
+    }
+
+    try {
+        var resp = await fetch('/api/scenarios/simulate', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) throw new Error('Simulation failed');
+        var data = await resp.json();
+
+        resultEl.innerHTML = '<div class="card" style="margin-top:16px">' +
+            '<h3>' + escapeHtml(data.title) + '</h3>' +
+            '<span class="badge">' + escapeHtml(data.category) + '</span>' +
+            '<div style="margin-top:12px;white-space:pre-wrap">' + formatMarkdown(data.simulation) + '</div>' +
+        '</div>';
+    } catch (e) {
+        resultEl.innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">Failed to simulate scenario. The AI service may be temporarily unavailable.</div>';
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   29. Rent Affordability Comparator
+   -------------------------------------------------------------------------- */
+
+async function loadRentComparator() {
+    var container = document.getElementById('rent-compare-container');
+
+    try {
+        var resp = await fetch('/api/rent-comparator/regions', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed to load');
+        var regions = await resp.json();
+
+        var optionsHtml = regions.map(function(r) {
+            return '<option value="' + escapeHtml(r.key) + '">' + escapeHtml(r.label) + '</option>';
+        }).join('');
+
+        container.innerHTML = '<h2 class="ph">Rent Comparator</h2>' +
+            '<p class="pp">Compare your rent against regional averages to assess fairness. Useful when challenging a Section 13 rent increase.</p>' +
+            '<div class="card">' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+                    '<div><label style="font-size:13px;font-weight:600">Region</label><select id="rc-region" class="n-ta" style="min-height:auto;padding:8px">' + optionsHtml + '</select></div>' +
+                    '<div><label style="font-size:13px;font-weight:600">Bedrooms</label><select id="rc-beds" class="n-ta" style="min-height:auto;padding:8px"><option value="">Any</option><option value="1">1 Bed</option><option value="2">2 Bed</option><option value="3">3 Bed</option></select></div>' +
+                    '<div><label style="font-size:13px;font-weight:600">Current Rent (£/month)</label><input type="number" id="rc-current" class="n-ta" style="min-height:auto;padding:8px" placeholder="e.g. 950"></div>' +
+                    '<div><label style="font-size:13px;font-weight:600">Proposed Rent (£/month, optional)</label><input type="number" id="rc-proposed" class="n-ta" style="min-height:auto;padding:8px" placeholder="Leave blank if no increase"></div>' +
+                '</div>' +
+                '<button class="btn btn-p" style="margin-top:12px" onclick="compareRent()">Compare</button>' +
+            '</div>' +
+            '<div id="rc-result"></div>';
+    } catch (e) {
+        container.innerHTML = '<h2 class="ph">Rent Comparator</h2><p class="empty">Failed to load.</p>';
+    }
+}
+
+async function compareRent() {
+    var region = document.getElementById('rc-region').value;
+    var beds = document.getElementById('rc-beds').value;
+    var current = parseFloat(document.getElementById('rc-current').value);
+    var proposed = document.getElementById('rc-proposed').value ? parseFloat(document.getElementById('rc-proposed').value) : null;
+
+    if (!current || current <= 0) { document.getElementById('rc-result').innerHTML = '<p class="empty">Please enter your current rent.</p>'; return; }
+
+    var body = { region: region, current_rent_pcm: current };
+    if (proposed) body.proposed_rent_pcm = proposed;
+    if (beds) body.bedrooms = parseInt(beds);
+
+    try {
+        var resp = await fetch('/api/rent-comparator/compare', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) throw new Error('Comparison failed');
+        var d = await resp.json();
+
+        var html = '<div class="card" style="margin-top:14px">' +
+            '<h3>' + escapeHtml(d.region) + ' Rent Analysis</h3>' +
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0;text-align:center">' +
+                '<div><div style="font-size:11px;color:var(--text-secondary)">Lower Quartile</div><div style="font-size:20px;font-weight:700">£' + d.regional_lower_quartile + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--text-secondary)">Median</div><div style="font-size:20px;font-weight:700;color:var(--primary)">£' + d.regional_median + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--text-secondary)">Upper Quartile</div><div style="font-size:20px;font-weight:700">£' + d.regional_upper_quartile + '</div></div>' +
+            '</div>';
+
+        if (d.bedroom_average) {
+            html += '<p style="font-size:13px;text-align:center;color:var(--text-secondary)">Average for ' + beds + '-bed: <strong>£' + d.bedroom_average + '/month</strong></p>';
+        }
+
+        var vsColor = d.current_vs_median_pct > 10 ? 'var(--danger)' : d.current_vs_median_pct < -10 ? 'var(--success)' : 'var(--warning)';
+        html += '<p style="margin-top:10px">Your rent (£' + d.current_rent_pcm + '): <strong style="color:' + vsColor + '">' + (d.current_vs_median_pct > 0 ? '+' : '') + d.current_vs_median_pct + '% vs median</strong></p>';
+
+        if (d.increase_pct !== null && d.increase_pct !== undefined) {
+            html += '<p>Proposed increase: <strong>' + d.increase_pct + '%</strong> (regional avg: ' + d.annual_increase_pct + '%)</p>';
+        }
+
+        html += '<div style="margin-top:12px;padding:12px;background:var(--bg-secondary);border-radius:8px">' +
+            '<strong>Assessment:</strong> ' + escapeHtml(d.assessment) + '</div>' +
+            '<div style="margin-top:8px;padding:12px;background:var(--bg-secondary);border-radius:8px">' +
+            '<strong>Tribunal Guidance:</strong> ' + escapeHtml(d.tribunal_advice) + '</div>' +
+            '<p style="font-size:11px;color:var(--text-secondary);margin-top:8px">Source: ' + escapeHtml(d.source) + '</p>' +
+        '</div>';
+
+        document.getElementById('rc-result').innerHTML = html;
+    } catch (e) {
+        document.getElementById('rc-result').innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">Comparison failed. Please try again.</div>';
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   30. Dispute Strength Assessor
+   -------------------------------------------------------------------------- */
+
+async function loadDisputeAssessor() {
+    var container = document.getElementById('dispute-assess-container');
+    container.innerHTML = '<h2 class="ph">Case Strength Assessor</h2><p class="pp">Analyses your evidence, timeline, and correspondence to score your dispute readiness.</p><div id="assess-result"><p class="empty">Analysing your case...</p></div>';
+
+    try {
+        var resp = await fetch('/api/dispute-assessor', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Assessment failed');
+        var d = await resp.json();
+
+        var gradeColor = d.overall_score >= 80 ? 'var(--success)' : d.overall_score >= 60 ? 'var(--warning)' : 'var(--danger)';
+
+        var html = '<div class="card" style="text-align:center;margin-bottom:16px">' +
+            '<div style="font-size:48px;font-weight:700;color:' + gradeColor + '">' + d.overall_score + '%</div>' +
+            '<div style="font-size:18px;font-weight:600">' + escapeHtml(d.grade) + '</div>' +
+            '<p style="margin-top:8px;color:var(--text-secondary)">' + escapeHtml(d.summary) + '</p>' +
+        '</div>';
+
+        /* Dimension breakdown */
+        html += '<div class="sec">Score Breakdown</div>';
+        d.dimensions.forEach(function(dim) {
+            var barColor = dim.score >= 70 ? 'var(--success)' : dim.score >= 40 ? 'var(--warning)' : 'var(--danger)';
+            html += '<div class="card" style="margin-bottom:8px">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                    '<strong>' + escapeHtml(dim.dimension) + '</strong>' +
+                    '<span style="font-weight:700;color:' + barColor + '">' + dim.score + '%</span>' +
+                '</div>' +
+                '<div class="pbar" style="margin:8px 0"><div class="pfill" style="width:' + dim.score + '%;background:' + barColor + '"></div></div>' +
+                '<p style="font-size:12px;color:var(--text-secondary)">' + dim.items_found + ' items found — ' + escapeHtml(dim.recommendation) + '</p>' +
+            '</div>';
+        });
+
+        /* Strengths & weaknesses */
+        if (d.strengths.length) {
+            html += '<div class="sec" style="margin-top:14px">Strengths</div>';
+            d.strengths.forEach(function(s) { html += '<div class="badge" style="background:rgba(39,134,74,0.1);color:var(--success);margin:2px">' + escapeHtml(s) + '</div>'; });
+        }
+        if (d.weaknesses.length) {
+            html += '<div class="sec" style="margin-top:14px">Areas to Improve</div>';
+            d.weaknesses.forEach(function(w) { html += '<div class="badge" style="background:rgba(192,57,43,0.1);color:var(--danger);margin:2px">' + escapeHtml(w) + '</div>'; });
+        }
+
+        /* Next steps */
+        if (d.next_steps.length) {
+            html += '<div class="sec" style="margin-top:14px">Recommended Next Steps</div><ol style="padding-left:18px">';
+            d.next_steps.forEach(function(step) { html += '<li style="margin-bottom:6px">' + escapeHtml(step) + '</li>'; });
+            html += '</ol>';
+        }
+
+        document.getElementById('assess-result').innerHTML = html;
+    } catch (e) {
+        document.getElementById('assess-result').innerHTML = '<p class="empty">Failed to assess case strength.</p>';
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   31. Document Vault with Versioning
+   -------------------------------------------------------------------------- */
+
+async function loadDocumentVault() {
+    var container = document.getElementById('vault-container');
+    container.innerHTML = '<h2 class="ph">Document Vault</h2><p class="pp">Store and version important housing documents.</p><div id="vault-actions"></div><div id="vault-list"><p class="empty">Loading...</p></div>';
+
+    try {
+        var typesResp = await fetch('/api/vault/types', { headers: getAuthHeaders() });
+        var types = typesResp.ok ? await typesResp.json() : [];
+
+        var optionsHtml = types.map(function(t) { return '<option value="' + escapeHtml(t.key) + '">' + escapeHtml(t.label) + '</option>'; }).join('');
+
+        document.getElementById('vault-actions').innerHTML = '<div class="card" style="margin-bottom:14px">' +
+            '<h4>Add Document</h4>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">' +
+                '<select id="vault-type" class="n-ta" style="min-height:auto;padding:8px">' + optionsHtml + '</select>' +
+                '<input type="text" id="vault-title" class="n-ta" style="min-height:auto;padding:8px" placeholder="Document title">' +
+            '</div>' +
+            '<textarea id="vault-desc" class="n-ta" style="min-height:60px;margin-top:8px" placeholder="Description or notes (optional)"></textarea>' +
+            '<textarea id="vault-content" class="n-ta" style="min-height:80px;margin-top:8px" placeholder="Paste document text here (optional)"></textarea>' +
+            '<button class="btn btn-p" style="margin-top:8px" onclick="addVaultDocument()">Save to Vault</button>' +
+        '</div>';
+
+        var resp = await fetch('/api/vault', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        var data = await resp.json();
+
+        if (!data.documents.length) {
+            document.getElementById('vault-list').innerHTML = '<p class="empty">No documents yet. Add your first document above.</p>';
+            return;
+        }
+
+        var html = '<div class="sec">Your Documents (' + data.total + ')</div>';
+        data.documents.forEach(function(doc) {
+            html += '<div class="card" style="margin-bottom:8px">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                    '<div><strong>' + escapeHtml(doc.title) + '</strong><span class="badge" style="margin-left:8px">' + escapeHtml(doc.doc_type_label) + '</span></div>' +
+                    '<span style="font-size:12px;color:var(--text-secondary)">v' + doc.version + '</span>' +
+                '</div>' +
+                (doc.description ? '<p style="font-size:13px;color:var(--text-secondary);margin-top:4px">' + escapeHtml(doc.description) + '</p>' : '') +
+                '<div style="display:flex;gap:8px;margin-top:8px">' +
+                    '<button class="btn btn-o" style="font-size:12px" onclick="viewVaultVersions(\'' + doc.version_chain_id + '\')">Version History</button>' +
+                    '<button class="btn btn-o" style="font-size:12px;color:var(--danger)" onclick="deleteVaultDoc(\'' + doc.document_id + '\')">Delete</button>' +
+                '</div>' +
+                '<div style="font-size:11px;color:var(--text-secondary);margin-top:6px">Added: ' + doc.created_at.split('T')[0] + '</div>' +
+            '</div>';
+        });
+
+        document.getElementById('vault-list').innerHTML = html;
+    } catch (e) {
+        document.getElementById('vault-list').innerHTML = '<p class="empty">Failed to load document vault.</p>';
+    }
+}
+
+async function addVaultDocument() {
+    var docType = document.getElementById('vault-type').value;
+    var title = document.getElementById('vault-title').value.trim();
+    var desc = document.getElementById('vault-desc').value.trim();
+    var content = document.getElementById('vault-content').value.trim();
+
+    if (!title) { alert('Please enter a document title.'); return; }
+
+    try {
+        var body = { doc_type: docType, title: title };
+        if (desc) body.description = desc;
+        if (content) body.content_text = content;
+
+        var resp = await fetch('/api/vault', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) { var err = await getResponseError(resp, 'Save failed'); alert(err); return; }
+
+        document.getElementById('vault-title').value = '';
+        document.getElementById('vault-desc').value = '';
+        document.getElementById('vault-content').value = '';
+        loadDocumentVault();
+    } catch (e) {
+        alert('Failed to save document.');
+    }
+}
+
+async function viewVaultVersions(chainId) {
+    try {
+        var resp = await fetch('/api/vault/versions/' + chainId, { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        var data = await resp.json();
+
+        var html = '<div class="card" style="margin-top:14px"><h4>Version History — ' + escapeHtml(data.doc_type) + '</h4>';
+        data.versions.forEach(function(v) {
+            html += '<div style="padding:8px 0;border-bottom:1px solid var(--bg-secondary)">' +
+                '<strong>v' + v.version + '</strong> — ' + escapeHtml(v.title) +
+                '<span style="float:right;font-size:12px;color:var(--text-secondary)">' + v.created_at.split('T')[0] + '</span>' +
+                (v.content_text ? '<p style="font-size:12px;color:var(--text-secondary);margin-top:4px">' + escapeHtml(v.content_text.substring(0, 150)) + (v.content_text.length > 150 ? '...' : '') + '</p>' : '') +
+            '</div>';
+        });
+        html += '</div>';
+
+        document.getElementById('vault-list').insertAdjacentHTML('afterbegin', html);
+    } catch (e) {
+        alert('Failed to load version history.');
+    }
+}
+
+async function deleteVaultDoc(docId) {
+    if (!confirm('Delete this document version?')) return;
+    try {
+        var resp = await fetch('/api/vault/' + docId, { method: 'DELETE', headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        loadDocumentVault();
+    } catch (e) {
+        alert('Failed to delete document.');
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   32. Deadline Tracker
+   -------------------------------------------------------------------------- */
+
+async function loadDeadlines() {
+    var container = document.getElementById('deadlines-container');
+    container.innerHTML = '<h2 class="ph">Deadline Tracker</h2><p class="pp">Upcoming deadlines auto-populated from your maintenance, compliance, and notices.</p><div id="deadline-list"><p class="empty">Loading...</p></div>';
+
+    try {
+        var resp = await fetch('/api/deadlines', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        var d = await resp.json();
+
+        if (!d.deadlines.length) {
+            document.getElementById('deadline-list').innerHTML = '<p class="empty">No upcoming deadlines. Keep your case updated to auto-detect deadlines.</p>';
+            return;
+        }
+
+        var summaryHtml = '<div style="display:flex;gap:12px;margin-bottom:14px">';
+        if (d.overdue_count > 0) summaryHtml += '<div class="badge" style="background:rgba(192,57,43,0.15);color:var(--danger)">' + d.overdue_count + ' Overdue</div>';
+        if (d.urgent_count > 0) summaryHtml += '<div class="badge" style="background:rgba(212,144,58,0.15);color:var(--warning)">' + d.urgent_count + ' Urgent</div>';
+        if (d.upcoming_count > 0) summaryHtml += '<div class="badge" style="background:rgba(43,138,126,0.15);color:var(--primary)">' + d.upcoming_count + ' Upcoming</div>';
+        summaryHtml += '</div>';
+
+        var html = summaryHtml;
+        d.deadlines.forEach(function(dl) {
+            var borderColor = dl.urgency === 'overdue' ? 'var(--danger)' : dl.urgency === 'urgent' ? 'var(--warning)' : 'var(--primary)';
+            var daysText = dl.days_remaining < 0 ? Math.abs(dl.days_remaining) + ' days overdue' : dl.days_remaining === 0 ? 'Due today' : dl.days_remaining + ' days remaining';
+
+            html += '<div class="card" style="margin-bottom:8px;border-left:3px solid ' + borderColor + '">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                    '<strong>' + escapeHtml(dl.title) + '</strong>' +
+                    '<span class="badge" style="font-size:11px">' + escapeHtml(dl.source) + '</span>' +
+                '</div>' +
+                '<p style="font-size:13px;color:var(--text-secondary);margin-top:4px">' + escapeHtml(dl.description) + '</p>' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">' +
+                    '<span style="font-size:13px;font-weight:600;color:' + borderColor + '">' + daysText + '</span>' +
+                    '<span style="font-size:12px;color:var(--text-secondary)">' + dl.deadline_date.split('T')[0] + '</span>' +
+                '</div>' +
+                '<p style="font-size:12px;color:var(--text-secondary);margin-top:6px;font-style:italic">' + escapeHtml(dl.action_required) + '</p>' +
+            '</div>';
+        });
+
+        document.getElementById('deadline-list').innerHTML = html;
+    } catch (e) {
+        document.getElementById('deadline-list').innerHTML = '<p class="empty">Failed to load deadlines.</p>';
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   33. Secure Messaging
+   -------------------------------------------------------------------------- */
+
+async function loadMessages() {
+    var container = document.getElementById('messages-container');
+    container.innerHTML = '<h2 class="ph">Secure Messages</h2><p class="pp">Communicate with your ' + (currentUser.role === 'landlord' ? 'tenants' : 'landlord') + ' with a full audit trail.</p><div id="msg-compose"></div><div id="msg-threads"><p class="empty">Loading...</p></div>';
+
+    /* Show compose form */
+    var composeHtml = '<div class="card" style="margin-bottom:14px">' +
+        '<h4>New Message</h4>';
+
+    if (currentUser.role === 'tenant') {
+        composeHtml += '<input type="hidden" id="msg-to" value="' + escapeHtml(currentUser.landlord_id || '') + '">';
+    } else {
+        composeHtml += '<input type="text" id="msg-to" class="n-ta" style="min-height:auto;padding:8px;margin-top:8px" placeholder="Recipient user ID">';
+    }
+
+    composeHtml += '<input type="text" id="msg-subject" class="n-ta" style="min-height:auto;padding:8px;margin-top:8px" placeholder="Subject">' +
+        '<textarea id="msg-body" class="n-ta" style="min-height:80px;margin-top:8px" placeholder="Write your message..."></textarea>' +
+        '<button class="btn btn-p" style="margin-top:8px" onclick="sendSecureMessage()">Send Message</button>' +
+    '</div>';
+
+    document.getElementById('msg-compose').innerHTML = composeHtml;
+
+    /* Load threads */
+    try {
+        var resp = await fetch('/api/messages/threads', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        var data = await resp.json();
+
+        if (!data.threads.length) {
+            document.getElementById('msg-threads').innerHTML = '<p class="empty">No messages yet.</p>';
+            return;
+        }
+
+        var html = '<div class="sec">Message Threads (' + data.total + ')</div>';
+        data.threads.forEach(function(t) {
+            html += '<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="openThread(\'' + t.thread_id + '\')">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                    '<strong>' + escapeHtml(t.subject) + '</strong>' +
+                    (t.unread_count > 0 ? '<span class="badge" style="background:var(--primary);color:white">' + t.unread_count + ' new</span>' : '') +
+                '</div>' +
+                '<p style="font-size:13px;color:var(--text-secondary)">' + escapeHtml(t.other_party_name) + ' (' + t.other_party_role + ') — ' + t.message_count + ' messages</p>' +
+                '<div style="font-size:11px;color:var(--text-secondary)">' + t.last_message_at.split('T')[0] + '</div>' +
+            '</div>';
+        });
+
+        document.getElementById('msg-threads').innerHTML = html;
+    } catch (e) {
+        document.getElementById('msg-threads').innerHTML = '<p class="empty">Failed to load messages.</p>';
+    }
+}
+
+async function sendSecureMessage(threadId) {
+    var to = document.getElementById('msg-to').value.trim();
+    var subject = document.getElementById('msg-subject').value.trim();
+    var body = document.getElementById('msg-body').value.trim();
+
+    if (!to || !subject || !body) { alert('Please fill in all fields.'); return; }
+
+    var payload = { recipient_id: to, subject: subject, body: body };
+    if (threadId) payload.thread_id = threadId;
+
+    try {
+        var resp = await fetch('/api/messages', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (!resp.ok) { var err = await getResponseError(resp, 'Send failed'); alert(err); return; }
+
+        document.getElementById('msg-subject').value = '';
+        document.getElementById('msg-body').value = '';
+        loadMessages();
+    } catch (e) {
+        alert('Failed to send message.');
+    }
+}
+
+async function openThread(threadId) {
+    var container = document.getElementById('msg-threads');
+    container.innerHTML = '<p class="empty">Loading thread...</p>';
+
+    try {
+        var resp = await fetch('/api/messages/threads/' + threadId, { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        var data = await resp.json();
+
+        var html = '<div style="margin-bottom:10px"><button class="btn btn-o" onclick="loadMessages()">Back to threads</button></div>' +
+            '<h3>' + escapeHtml(data.subject) + '</h3>';
+
+        data.messages.forEach(function(m) {
+            var isMe = m.sender_id === currentUser.id;
+            html += '<div class="card" style="margin-bottom:8px;border-left:3px solid ' + (isMe ? 'var(--primary)' : 'var(--bg-secondary)') + '">' +
+                '<div style="display:flex;justify-content:space-between">' +
+                    '<strong>' + escapeHtml(m.sender_name) + '</strong>' +
+                    '<span style="font-size:11px;color:var(--text-secondary)">' + m.created_at.replace('T', ' ').substring(0, 16) + '</span>' +
+                '</div>' +
+                '<p style="margin-top:6px;white-space:pre-wrap">' + escapeHtml(m.body) + '</p>' +
+            '</div>';
+        });
+
+        /* Reply form */
+        html += '<div class="card" style="margin-top:12px">' +
+            '<textarea id="reply-body" class="n-ta" style="min-height:60px" placeholder="Write a reply..."></textarea>' +
+            '<button class="btn btn-p" style="margin-top:8px" onclick="replyToThread(\'' + threadId + '\',\'' + escapeHtml(data.subject) + '\')">Reply</button>' +
+        '</div>';
+
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<p class="empty">Failed to load thread.</p>';
+    }
+}
+
+async function replyToThread(threadId, subject) {
+    var body = document.getElementById('reply-body').value.trim();
+    if (!body) { alert('Please write a reply.'); return; }
+
+    /* Determine recipient from the thread */
+    try {
+        var resp = await fetch('/api/messages/threads/' + threadId, { headers: getAuthHeaders() });
+        var data = resp.ok ? await resp.json() : null;
+        if (!data || !data.messages.length) throw new Error('Thread not found');
+
+        /* Find the other party */
+        var otherMsg = data.messages.find(function(m) { return m.sender_id !== currentUser.id; });
+        var recipientId = otherMsg ? otherMsg.sender_id : data.messages[0].recipient_id;
+
+        var sendResp = await fetch('/api/messages', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ recipient_id: recipientId, subject: subject, body: body, thread_id: threadId })
+        });
+        if (!sendResp.ok) throw new Error('Send failed');
+
+        openThread(threadId);
+    } catch (e) {
+        alert('Failed to send reply.');
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   34. Emergency Panic Button
+   -------------------------------------------------------------------------- */
+
+async function loadEmergencyPage() {
+    var container = document.getElementById('emergency-container');
+
+    try {
+        var resp = await fetch('/api/emergency/types', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        var types = await resp.json();
+
+        var html = '<h2 class="ph" style="color:var(--danger)">Emergency Help</h2>' +
+            '<p class="pp">If you\'re in an emergency housing situation, press the relevant button below. This will create a timestamped evidence record and provide immediate guidance.</p>' +
+            '<div class="grid" style="margin-top:16px">';
+
+        types.forEach(function(t) {
+            var isC = t.urgency === 'critical';
+            html += '<div class="card" style="border:2px solid ' + (isC ? 'var(--danger)' : 'var(--warning)') + ';cursor:pointer;text-align:center" onclick="activatePanic(\'' + t.key + '\')">' +
+                '<div style="font-size:32px;margin-bottom:8px">' + (isC ? '🚨' : '⚠️') + '</div>' +
+                '<h4>' + escapeHtml(t.label) + '</h4>' +
+                '<span class="badge" style="background:' + (isC ? 'rgba(192,57,43,0.15);color:var(--danger)' : 'rgba(212,144,58,0.15);color:var(--warning)') + '">' + t.urgency + '</span>' +
+            '</div>';
+        });
+
+        html += '</div><div id="emergency-result"></div>';
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<h2 class="ph">Emergency Help</h2><p class="empty">Failed to load emergency options.</p>';
+    }
+}
+
+async function activatePanic(emergencyType) {
+    var desc = prompt('Briefly describe what is happening (optional):');
+    var resultEl = document.getElementById('emergency-result');
+    resultEl.innerHTML = '<div class="card"><p class="empty">Recording emergency...</p></div>';
+
+    var body = { emergency_type: emergencyType };
+    if (desc) body.description = desc;
+
+    try {
+        var resp = await fetch('/api/emergency/activate', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) throw new Error('Failed');
+        var d = await resp.json();
+
+        var html = '<div class="card" style="margin-top:16px;border:2px solid var(--danger)">' +
+            '<h3 style="color:var(--danger)">' + escapeHtml(d.label) + '</h3>' +
+            '<p style="font-size:12px;color:var(--text-secondary)">Recorded at: ' + d.timestamp.replace('T', ' ').substring(0, 19) + ' (evidence ID: ' + d.evidence_id + ')</p>' +
+            '<div class="sec" style="margin-top:12px">Immediate Steps</div><ol>';
+
+        d.immediate_steps.forEach(function(step) { html += '<li style="margin-bottom:6px;font-weight:500">' + escapeHtml(step) + '</li>'; });
+        html += '</ol>';
+
+        html += '<div class="sec" style="margin-top:12px">Your Legal Position</div>' +
+            '<p>' + escapeHtml(d.legal_position) + '</p>';
+
+        html += '<div class="sec" style="margin-top:12px">Emergency Contacts</div>';
+        d.contacts.forEach(function(c) {
+            html += '<div style="padding:8px 0;border-bottom:1px solid var(--bg-secondary)">' +
+                '<strong>' + escapeHtml(c.name) + '</strong> — <span style="font-size:18px;font-weight:700;color:var(--primary)">' + escapeHtml(c.number) + '</span>' +
+                '<div style="font-size:12px;color:var(--text-secondary)">' + escapeHtml(c.note) + '</div>' +
+            '</div>';
+        });
+
+        html += '<p style="margin-top:12px;font-size:13px;color:var(--success)">' + escapeHtml(d.message) + '</p></div>';
+        resultEl.innerHTML = html;
+    } catch (e) {
+        resultEl.innerHTML = '<div class="card" style="border-left:3px solid var(--danger)">Failed to record emergency. If you are in danger, call 999 immediately.</div>';
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   35. Compliance Reminders (Landlord)
+   -------------------------------------------------------------------------- */
+
+async function loadReminders() {
+    var container = document.getElementById('reminders-container');
+    container.innerHTML = '<h2 class="ph">Compliance Reminders</h2><p class="pp">Set up reminders for certificate renewals and compliance deadlines.</p><div id="reminder-form"></div><div id="reminder-list"><p class="empty">Loading...</p></div>';
+
+    try {
+        var typesResp = await fetch('/api/reminders/types', { headers: getAuthHeaders() });
+        var types = typesResp.ok ? await typesResp.json() : [];
+
+        var optionsHtml = types.map(function(t) { return '<option value="' + escapeHtml(t.key) + '">' + escapeHtml(t.label) + ' (' + t.default_lead_days + ' days notice)</option>'; }).join('');
+
+        document.getElementById('reminder-form').innerHTML = '<div class="card" style="margin-bottom:14px">' +
+            '<h4>Add Reminder</h4>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">' +
+                '<select id="rem-type" class="n-ta" style="min-height:auto;padding:8px">' + optionsHtml + '</select>' +
+                '<input type="date" id="rem-expiry" class="n-ta" style="min-height:auto;padding:8px">' +
+            '</div>' +
+            '<input type="text" id="rem-address" class="n-ta" style="min-height:auto;padding:8px;margin-top:8px" placeholder="Property address (optional)">' +
+            '<textarea id="rem-notes" class="n-ta" style="min-height:50px;margin-top:8px" placeholder="Notes (optional)"></textarea>' +
+            '<button class="btn btn-p" style="margin-top:8px" onclick="addReminder()">Set Reminder</button>' +
+        '</div>';
+
+        var resp = await fetch('/api/reminders', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        var data = await resp.json();
+
+        if (!data.reminders.length) {
+            document.getElementById('reminder-list').innerHTML = '<p class="empty">No reminders set. Add your first reminder above.</p>';
+            return;
+        }
+
+        var html = '<div class="sec">Your Reminders (' + data.total + ')';
+        if (data.expiring_soon > 0) html += ' — <span style="color:var(--warning)">' + data.expiring_soon + ' expiring within 30 days</span>';
+        html += '</div>';
+
+        data.reminders.forEach(function(r) {
+            var borderColor = r.status === 'expired' ? 'var(--danger)' : r.status === 'triggered' ? 'var(--warning)' : 'var(--success)';
+            var daysText = r.days_until_expiry < 0 ? Math.abs(r.days_until_expiry) + ' days expired' : r.days_until_expiry + ' days until expiry';
+
+            html += '<div class="card" style="margin-bottom:8px;border-left:3px solid ' + borderColor + '">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                    '<strong>' + escapeHtml(r.title) + '</strong>' +
+                    '<span class="badge">' + escapeHtml(r.status) + '</span>' +
+                '</div>' +
+                (r.property_address ? '<p style="font-size:12px;color:var(--text-secondary)">' + escapeHtml(r.property_address) + '</p>' : '') +
+                '<div style="display:flex;justify-content:space-between;margin-top:8px">' +
+                    '<span style="color:' + borderColor + ';font-weight:600">' + daysText + '</span>' +
+                    '<span style="font-size:12px;color:var(--text-secondary)">Expires: ' + r.expiry_date + '</span>' +
+                '</div>' +
+                '<button class="btn btn-o" style="font-size:12px;margin-top:8px;color:var(--danger)" onclick="deleteReminder(\'' + r.reminder_id + '\')">Remove</button>' +
+            '</div>';
+        });
+
+        document.getElementById('reminder-list').innerHTML = html;
+    } catch (e) {
+        document.getElementById('reminder-list').innerHTML = '<p class="empty">Failed to load reminders.</p>';
+    }
+}
+
+async function addReminder() {
+    var rType = document.getElementById('rem-type').value;
+    var expiry = document.getElementById('rem-expiry').value;
+    var address = document.getElementById('rem-address').value.trim();
+    var notes = document.getElementById('rem-notes').value.trim();
+
+    if (!expiry) { alert('Please select an expiry date.'); return; }
+
+    var body = { reminder_type: rType, expiry_date: expiry };
+    if (address) body.property_address = address;
+    if (notes) body.notes = notes;
+
+    try {
+        var resp = await fetch('/api/reminders', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) { var err = await getResponseError(resp, 'Failed'); alert(err); return; }
+
+        document.getElementById('rem-expiry').value = '';
+        document.getElementById('rem-address').value = '';
+        document.getElementById('rem-notes').value = '';
+        loadReminders();
+    } catch (e) {
+        alert('Failed to create reminder.');
+    }
+}
+
+async function deleteReminder(remId) {
+    if (!confirm('Delete this reminder?')) return;
+    try {
+        var resp = await fetch('/api/reminders/' + remId, { method: 'DELETE', headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        loadReminders();
+    } catch (e) {
+        alert('Failed to delete reminder.');
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   36. Landlord Reputation Score
+   -------------------------------------------------------------------------- */
+
+async function loadReputation() {
+    var container = document.getElementById('reputation-container');
+    container.innerHTML = '<h2 class="ph">Reputation Score</h2><p class="pp">Your landlord reputation based on compliance, maintenance response, and task management.</p><div id="rep-result"><p class="empty">Calculating score...</p></div>';
+
+    try {
+        var resp = await fetch('/api/reputation/my/score', { headers: getAuthHeaders() });
+        if (!resp.ok) throw new Error('Failed');
+        var d = await resp.json();
+
+        var gradeColor = d.overall_score >= 80 ? 'var(--success)' : d.overall_score >= 60 ? 'var(--warning)' : 'var(--danger)';
+
+        var html = '<div class="card" style="text-align:center;margin-bottom:16px">' +
+            '<div style="font-size:56px;font-weight:700;color:' + gradeColor + '">' + d.grade + '</div>' +
+            '<div style="font-size:24px;font-weight:600">' + d.overall_score + ' / 100</div>' +
+            '<p style="color:var(--text-secondary);margin-top:4px">' + d.total_tenants + ' active tenant' + (d.total_tenants !== 1 ? 's' : '') + '</p>' +
+        '</div>';
+
+        html += '<div class="sec">Score Breakdown</div>';
+        d.breakdown.forEach(function(b) {
+            var barColor = b.score >= 75 ? 'var(--success)' : b.score >= 50 ? 'var(--warning)' : 'var(--danger)';
+            html += '<div class="card" style="margin-bottom:8px">' +
+                '<div style="display:flex;justify-content:space-between">' +
+                    '<strong>' + escapeHtml(b.category) + '</strong>' +
+                    '<span style="font-weight:700;color:' + barColor + '">' + b.score + '%</span>' +
+                '</div>' +
+                '<div class="pbar" style="margin:8px 0"><div class="pfill" style="width:' + b.score + '%;background:' + barColor + '"></div></div>' +
+                '<p style="font-size:12px;color:var(--text-secondary)">' + escapeHtml(b.detail) + '</p>' +
+            '</div>';
+        });
+
+        document.getElementById('rep-result').innerHTML = html;
+    } catch (e) {
+        document.getElementById('rep-result').innerHTML = '<p class="empty">Failed to calculate reputation score.</p>';
+    }
+}
+
+
+/* --------------------------------------------------------------------------
+   37. Auto-boot (resume session if token exists)
    -------------------------------------------------------------------------- */
 
 /* Load translations on startup, then boot if logged in */

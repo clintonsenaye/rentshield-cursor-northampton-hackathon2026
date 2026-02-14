@@ -8,7 +8,9 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from typing import Dict, Any
 
 from models.schemas import NoticeRequest
@@ -18,10 +20,12 @@ from database.connection import get_analytics_collection
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/notice", tags=["notice"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/check")
-async def notice_check_endpoint(request: NoticeRequest) -> Dict[str, Any]:
+@limiter.limit("5/minute")
+async def notice_check_endpoint(http_request: Request, request: NoticeRequest) -> Dict[str, Any]:
     """
     Analyze a landlord's notice for legal validity.
     

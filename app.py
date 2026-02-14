@@ -11,11 +11,12 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -23,9 +24,12 @@ from slowapi.util import get_remote_address
 from config import get_settings
 from database.connection import close_database_connection, initialize_database, get_database, get_mongo_client
 from routes import (
-    admin_analytics, agreement, analytics, chat, compliance, deposit, evidence,
-    evidence_guide, knowledge, letters, maintenance, notice, perks, rewards,
-    tasks, timeline, tts, users, wellbeing,
+    admin_analytics, agreement, analytics, case_export, chat, compliance,
+    dashboard, deadline_tracker, deposit, dispute_assessor, document_vault,
+    evidence, evidence_guide, gdpr, knowledge, letters, local_authority,
+    maintenance, messaging, notice, notice_calculator, notifications,
+    panic_button, perks, quiz, reminders, rent_comparator, reputation,
+    rewards, scenario_simulator, tasks, timeline, tts, users, wellbeing,
 )
 
 # Configure structured logging
@@ -86,15 +90,37 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 if os.getenv("FORCE_HTTPS", "").lower() in ("1", "true", "yes"):
     app.add_middleware(HTTPSRedirectMiddleware)
 
-# Add CORS middleware with configurable origins
-allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",")
+# Add CORS middleware with configurable origins (default: same-origin only)
+_cors_env = os.getenv("CORS_ORIGINS", "")
+allowed_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True if allowed_origins != ["*"] else False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=bool(allowed_origins),
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+# Security headers middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "media-src 'self' blob: data:; "
+            "connect-src 'self'; "
+            "font-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Register API routes
 app.include_router(chat.router)
@@ -116,6 +142,22 @@ app.include_router(compliance.router)
 app.include_router(knowledge.router)
 app.include_router(evidence_guide.router)
 app.include_router(admin_analytics.router)
+app.include_router(dashboard.router)
+app.include_router(case_export.router)
+app.include_router(notifications.router)
+app.include_router(notice_calculator.router)
+app.include_router(gdpr.router)
+app.include_router(local_authority.router)
+app.include_router(quiz.router)
+app.include_router(reputation.router)
+app.include_router(document_vault.router)
+app.include_router(dispute_assessor.router)
+app.include_router(messaging.router)
+app.include_router(rent_comparator.router)
+app.include_router(deadline_tracker.router)
+app.include_router(scenario_simulator.router)
+app.include_router(reminders.router)
+app.include_router(panic_button.router)
 
 # Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -135,8 +177,7 @@ def root() -> FileResponse:
     index_path = os.path.join("static", "index.html")
 
     if not os.path.exists(index_path):
-        logger.error(f"Frontend file not found: {index_path}")
-        from fastapi import HTTPException
+        logger.error("Frontend file not found: %s", index_path)
         raise HTTPException(
             status_code=404,
             detail="Frontend not found. Ensure static/index.html exists.",
@@ -182,12 +223,12 @@ def health_check() -> dict:
 if __name__ == "__main__":
     import uvicorn
 
-    settings = get_settings()
+    _settings = get_settings()
 
     uvicorn.run(
         "app:app",
-        host=settings.app_host,
-        port=settings.app_port,
-        reload=True,
+        host=_settings.app_host,
+        port=_settings.app_port,
+        reload=os.getenv("RELOAD", "false").lower() in ("1", "true", "yes"),
         log_level="info",
     )

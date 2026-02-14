@@ -10,7 +10,9 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from models.schemas import WellbeingEntryRequest, WellbeingEntryResponse, WellbeingHistoryResponse
 from services.ai_service import get_ai_service
@@ -19,6 +21,7 @@ from database.connection import get_database
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/wellbeing", tags=["wellbeing"])
+limiter = Limiter(key_func=get_remote_address)
 
 # Points awarded for journaling
 JOURNAL_ENTRY_POINTS = 15
@@ -63,7 +66,8 @@ MOOD_LABELS = {
 
 
 @router.post("", response_model=WellbeingEntryResponse)
-async def create_wellbeing_entry(request: WellbeingEntryRequest) -> WellbeingEntryResponse:
+@limiter.limit("5/minute")
+async def create_wellbeing_entry(http_request: Request, request: WellbeingEntryRequest) -> WellbeingEntryResponse:
     """
     Create a new wellbeing journal entry with AI-guided prompts.
     

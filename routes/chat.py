@@ -8,7 +8,9 @@ import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from models.schemas import ChatRequest, ChatResponse, SourceCitation
 from services.ai_service import get_ai_service
@@ -19,10 +21,12 @@ from utils.rag import get_legal_context_with_sources
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest) -> ChatResponse:
+@limiter.limit("10/minute")
+async def chat_endpoint(http_request: Request, request: ChatRequest) -> ChatResponse:
     """
     Main chat endpoint for legal guidance.
     

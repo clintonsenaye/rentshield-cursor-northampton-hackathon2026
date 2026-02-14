@@ -134,7 +134,16 @@ def seed_database() -> None:
         users_collection.create_index("landlord_id")
 
         admin_email = os.getenv("ADMIN_EMAIL", "admin@rentshield.co.uk")
-        admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
+        admin_password = os.getenv("ADMIN_PASSWORD")
+        force_change = False
+        if not admin_password:
+            import secrets as _secrets
+            admin_password = _secrets.token_urlsafe(16)
+            force_change = True
+            logger.warning(
+                "ADMIN_PASSWORD not set — generated random password: %s",
+                admin_password,
+            )
 
         admin_exists = users_collection.find_one({"role": "admin"})
         if not admin_exists:
@@ -148,7 +157,7 @@ def seed_database() -> None:
                 "created_at": "2026-01-01T00:00:00+00:00",
                 "auth_token": "",
                 "token_expires_at": None,
-                "must_change_password": True,
+                "must_change_password": force_change,
             })
             logger.info("Created default admin user (%s)", admin_email)
         else:
@@ -220,6 +229,14 @@ def seed_database() -> None:
         compliance_collection = db["compliance"]
         compliance_collection.create_index("user_id")
         logger.info("Created compliance collection with indexes")
+
+        # Create notifications collection with indexes
+        notifications_collection = db["notifications"]
+        notifications_collection.create_index("notification_id", unique=True)
+        notifications_collection.create_index("recipient_id")
+        notifications_collection.create_index("created_at")
+        notifications_collection.create_index("is_read")
+        logger.info("Created notifications collection with indexes")
 
         # Seed community knowledge base
         kb_collection = db["knowledge_base"]

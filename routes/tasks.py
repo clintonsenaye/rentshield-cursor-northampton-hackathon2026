@@ -20,6 +20,7 @@ from fastapi import APIRouter, File, Header, HTTPException, Query, UploadFile
 
 from database.connection import get_database
 from models.users import CreateTaskRequest, TaskResponse, VerifyTaskRequest
+from routes.notifications import create_notification
 from utils.auth import require_role
 
 logger = logging.getLogger(__name__)
@@ -352,6 +353,27 @@ def verify_task(
         )
 
         logger.info(f"Landlord rejected task {task_id}: {request.reason}")
+
+    # Notify tenant
+    tenant_id = task.get("tenant_id", "")
+    task_title = task.get("title", "Task")
+    if tenant_id:
+        if request.approved:
+            create_notification(
+                recipient_id=tenant_id,
+                title="Task Approved",
+                message=f'"{task_title}" approved! You earned {task["points_reward"]} points.',
+                notification_type="task_update",
+                link_to="tasks",
+            )
+        else:
+            create_notification(
+                recipient_id=tenant_id,
+                title="Task Returned",
+                message=f'"{task_title}" needs resubmission: {request.reason.strip()[:100]}',
+                notification_type="task_update",
+                link_to="tasks",
+            )
 
     # Fetch updated task
     updated_task = tasks_col.find_one({"task_id": task_id}, {"_id": 0})

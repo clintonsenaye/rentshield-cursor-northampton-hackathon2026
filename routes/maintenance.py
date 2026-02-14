@@ -24,6 +24,7 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from database.connection import get_database
+from routes.notifications import create_notification
 from utils.auth import require_role
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,23 @@ def _sanitize_filename(filename: str) -> str:
     return safe_name + ext
 
 
+# Magic byte signatures for allowed image types
+_MAGIC_BYTES = {
+    "image/jpeg": [b"\xff\xd8\xff"],
+    "image/png": [b"\x89PNG\r\n\x1a\n"],
+    "image/gif": [b"GIF87a", b"GIF89a"],
+    "image/webp": [b"RIFF"],
+}
+
+
+def _validate_magic_bytes(data: bytes, content_type: str) -> bool:
+    """Verify file content matches its declared MIME type via magic bytes."""
+    signatures = _MAGIC_BYTES.get(content_type)
+    if signatures is None:
+        return False
+    return any(data[:len(sig)] == sig for sig in signatures)
+
+
 # === TENANT: REPORT AND TRACK MAINTENANCE ISSUES ===
 
 @router.post("")
@@ -175,6 +193,9 @@ async def report_issue(
         contents = await file.read()
         if len(contents) > MAX_UPLOAD_SIZE_BYTES:
             raise HTTPException(status_code=400, detail="File too large. Maximum 10 MB.")
+
+        if not _validate_magic_bytes(contents, file.content_type or ""):
+            raise HTTPException(status_code=400, detail="File content does not match its declared type.")
 
         safe_name = _sanitize_filename(file.filename)
         stored_name = f"{uuid.uuid4()}_{safe_name}"
@@ -221,6 +242,16 @@ async def report_issue(
     db["maintenance"].insert_one(request_doc)
     logger.info("Maintenance request %s by tenant %s (category: %s)",
                 request_id, user["user_id"], category)
+
+    # Notify landlord about the new maintenance report
+    if landlord_id:
+        create_notification(
+            recipient_id=landlord_id,
+            title=f"New Maintenance Report: {cat_info['name']}",
+            message=f"{user.get('name', 'A tenant')} reported a {cat_info['name'].lower()} issue ({cat_info['urgency']} urgency).",
+            notification_type="maintenance_new",
+            link_to="maintenance",
+        )
 
     request_doc.pop("_id", None)
     return request_doc
@@ -391,6 +422,18 @@ def respond_to_request(
 
     if not result:
         raise HTTPException(status_code=404, detail="Request not found.")
+
+    # Notify tenant about the update
+    tenant_id = result.get("tenant_id", "")
+    if tenant_id:
+        status_label = body.new_status.replace("_", " ").title()
+        create_notification(
+            recipient_id=tenant_id,
+            title=f"Maintenance {status_label}",
+            message=f"Your {result.get('category_name', '')} request has been {status_label.lower()} by your landlord.",
+            notification_type="maintenance_update",
+            link_to="maintenance",
+        )
 
     result.pop("_id", None)
     return result
